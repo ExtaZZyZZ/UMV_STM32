@@ -1,0 +1,82 @@
+{
+  "_comment": "СГЕНЕРИРОВАНО protocol/generate.py — не редактировать. Вендорится в репозиторий прошивки; обе реализации CRC16 и кодирования ADU проверяются против этих значений.",
+  "protocol_version": 2,
+  "slave_address": 1,
+  "crc_algorithm": {
+    "name": "Modbus CRC-16",
+    "polynomial": "0xA001 (reflected 0x8005)",
+    "init": "0xFFFF",
+    "byte_order_on_wire": "little endian"
+  },
+  "crc_vectors": [
+    {
+      "name": "empty",
+      "data_hex": "",
+      "crc": "0xFFFF"
+    },
+    {
+      "name": "single_zero",
+      "data_hex": "00",
+      "crc": "0x40BF"
+    },
+    {
+      "name": "single_ff",
+      "data_hex": "ff",
+      "crc": "0x00FF"
+    },
+    {
+      "name": "ascii_123456789",
+      "data_hex": "313233343536373839",
+      "crc": "0x4B37"
+    },
+    {
+      "name": "all_bytes_0_15",
+      "data_hex": "000102030405060708090a0b0c0d0e0f",
+      "crc": "0xE7B4"
+    }
+  ],
+  "frame_vectors": [
+    {
+      "name": "read_state_request",
+      "description": "FC04: забрать весь блок телеметрии одной транзакцией",
+      "pdu_hex": "0400000016",
+      "adu_hex": "01040000001671c4",
+      "crc": "0xC471"
+    },
+    {
+      "name": "write_outputs_request",
+      "description": "FC06: маска дискретных выходов — включены четыре ходовых огня",
+      "pdu_hex": "060004000f",
+      "adu_hex": "01060004000f880f",
+      "crc": "0x0F88"
+    },
+    {
+      "name": "buoy_release_request",
+      "description": "FC16: командное рукопожатие, сброс круга импульсом 500 мс, cmd_seq=1",
+      "pdu_hex": "1000000004080001000101f40000",
+      "adu_hex": "011000000004080001000101f40000db74",
+      "crc": "0x74DB"
+    },
+    {
+      "name": "buoy_release_repeat_request",
+      "description": "Тот же кадр байт в байт — повтор после таймаута. Слейв обязан переACKнуть, но НЕ переисполнить: круг уходит один раз.",
+      "pdu_hex": "1000000004080001000101f40000",
+      "adu_hex": "011000000004080001000101f40000db74",
+      "crc": "0x74DB"
+    },
+    {
+      "name": "axis_goto_request",
+      "description": "FC16: перевести ось 0 на ступень 2, cmd_seq=7",
+      "pdu_hex": "1000000004080007000200000002",
+      "adu_hex": "01100000000408000700020000000238bb",
+      "crc": "0xBB38"
+    },
+    {
+      "name": "exception_illegal_data_address",
+      "description": "Исключение 02 на FC04 — обращение за пределы блока",
+      "pdu_hex": "8402",
+      "adu_hex": "018402c2c1",
+      "crc": "0xC1C2"
+    }
+  ]
+}

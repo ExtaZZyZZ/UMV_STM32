@@ -1,0 +1,148 @@
+/* СГЕНЕРИРОВАНО protocol/generate.py — НЕ РЕДАКТИРОВАТЬ.
+ *
+ * Источник: protocol/board1_registers.yaml в репозитории pi4-fleet.
+ * Этот файл вендорится копией; правки вносить в YAML и перегенерировать.
+ */
+#ifndef BOARD_REGISTERS_H
+#define BOARD_REGISTERS_H
+
+#include <stdint.h>
+
+#define PROTOCOL_VERSION 2u
+#define BOARD_ID 1u
+#define BOARD_NAME "payload-board-1"
+
+/* Отдаётся в регистре layout_crc. Мастер сверяет со своим значением и
+ * отказывается работать при несовпадении. */
+#define LAYOUT_CRC 0x2FAFu
+
+#define MODBUS_SLAVE_ADDRESS 1u
+#define MODBUS_BAUD 115200u
+#define MODBUS_PARITY 'E'
+#define MODBUS_STOP_BITS 1u
+
+#define POLL_INTERVAL_MS 50u
+#define COMMAND_TIMEOUT_MS 100u
+#define COMMAND_RETRIES 3u
+#define LINK_TIMEOUT_MS 500u
+#define SETTLE_AFTER_OUTPUT_MS 150u
+#define FRAME_GAP_MS 1u
+
+typedef enum {
+    OUT_NAV_TOP = 0,  /* Топовый огонь */
+    OUT_NAV_PORT = 1,  /* Бортовой огонь левый */
+    OUT_NAV_STARBOARD = 2,  /* Бортовой огонь правый */
+    OUT_NAV_STERN = 3,  /* Кормовой огонь */
+    OUT_SPOTLIGHT = 4,  /* Фары дальнего света */
+    OUT_LIGHTBAR = 5,  /* Светодиодная балка */
+    OUT_SGU_LIGHT = 6,  /* СГУ «КОЛУМБ» синий */
+    OUT_AUDIO_ENABLE = 7,  /* Питание/канал усилителя */
+} out_t;
+
+typedef enum {
+    IN_BUOY_DEPLOYED = 0,  /* Концевик системы сброса круга */
+    IN_ESTOP = 1,  /* Грибовидная красная кнопка */
+} in_t;
+
+typedef enum {
+    HREG_CMD_SEQ = 0,  /* Номер команды */
+    HREG_CMD_CODE = 1,  /* Код команды */
+    HREG_CMD_ARG0 = 2,  /* Аргумент 0 */
+    HREG_CMD_ARG1 = 3,  /* Аргумент 1 */
+    HREG_OUTPUTS = 4,  /* Битовая маска дискретных выходов */
+} hreg_t;
+
+typedef enum {
+    IREG_ACK_SEQ = 0,  /* Номер последней исполненной команды */
+    IREG_ACK_RESULT = 1,  /* Результат последней команды */
+    IREG_DO_ACTUAL = 2,  /* Фактическое состояние дискретных выходов */
+    IREG_DI_BITS = 3,  /* Дискретные входы */
+    IREG_FLAGS = 4,  /* Флаги состояния */
+    IREG_AXIS0_STATE = 5,  /* Состояние оси 0 */
+    IREG_AXIS0_STEP = 6,  /* Ступень оси 0 */
+    IREG_AXIS0_POS_MM_X10 = 7,  /* Положение оси 0, мм x10 */
+    IREG_AXIS0_FAULT = 8,  /* Код неисправности оси 0 */
+    IREG_AXIS1_STATE = 9,  /* Состояние оси 1 */
+    IREG_AXIS1_STEP = 10,  /* Ступень оси 1 */
+    IREG_AXIS1_POS_MM_X10 = 11,  /* Положение оси 1, мм x10 */
+    IREG_AXIS1_FAULT = 12,  /* Код неисправности оси 1 */
+    IREG_UPTIME_LO = 13,  /* Наработка, мс (младшее слово) */
+    IREG_UPTIME_HI = 14,  /* Наработка, мс (старшее слово) */
+    IREG_CRC_ERR = 15,  /* Счётчик кадров с битым CRC */
+    IREG_FRAME_ERR = 16,  /* Счётчик ошибок кадрирования */
+    IREG_ENC_ERR = 17,  /* Счётчик отказов обмена с энкодером */
+    IREG_PROTO_VER = 18,  /* Версия протокола в прошивке */
+    IREG_LAYOUT_CRC = 19,  /* CRC регистровой карты */
+    IREG_FW_BUILD_LO = 20,  /* Идентификатор сборки прошивки (младшее слово) */
+    IREG_FW_BUILD_HI = 21,  /* Идентификатор сборки прошивки (старшее слово) */
+} ireg_t;
+
+typedef enum {
+    ACK_RESULT_OK = 0,
+    ACK_RESULT_BAD_ARG = 1,
+    ACK_RESULT_REFUSED_SAFETY = 2,
+    ACK_RESULT_REFUSED_BUSY = 3,
+    ACK_RESULT_REFUSED_LINK_LOST = 4,
+    ACK_RESULT_UNKNOWN_CMD = 5,
+} ack_result_t;
+
+typedef enum {
+    AXIS_FAULT_NONE = 0,
+    AXIS_FAULT_STALL = 1,
+    AXIS_FAULT_TIMEOUT = 2,
+    AXIS_FAULT_ENCODER_LOST = 3,
+    AXIS_FAULT_OVER_TRAVEL = 4,
+} axis_fault_t;
+
+typedef enum {
+    AXIS_STATE_IDLE = 0,
+    AXIS_STATE_MOVING = 1,
+    AXIS_STATE_HOMING = 2,
+    AXIS_STATE_FAULT = 3,
+    AXIS_STATE_UNKNOWN = 4,
+} axis_state_t;
+
+typedef enum {
+    CMD_CODE_NOP = 0,
+    CMD_CODE_BUOY_RELEASE = 1,
+    CMD_CODE_AXIS_GOTO = 2,
+    CMD_CODE_AXIS_STOP = 3,
+    CMD_CODE_AXIS_HOME = 4,
+} cmd_code_t;
+
+typedef enum {
+    STATUS_FLAG_LINK_OK = 0,
+    STATUS_FLAG_WDT_TRIPPED = 1,
+    STATUS_FLAG_ENCODER_OK = 2,
+} status_flag_t;
+
+#define OUT_BIT_COUNT 8u
+#define IN_BIT_COUNT 2u
+#define HREG_COUNT 5u
+#define IREG_COUNT 22u
+
+/* Границы блоков, каждый пишется одной транзакцией. */
+#define COMMAND_BLOCK_START 0x0000u
+#define COMMAND_BLOCK_COUNT 4u
+
+/* Статические параметры осей. */
+typedef struct {
+    uint8_t  index;
+    uint16_t stroke_mm;
+    uint16_t step_mm;
+    uint8_t  max_step;
+    uint16_t speed_mm_s_x10;
+    uint8_t  has_encoder;
+    uint32_t step_travel_ms;
+} axis_spec_t;
+
+#define AXIS_COUNT 2u
+
+static const axis_spec_t AXIS_SPECS[AXIS_COUNT] = {
+    { .index = 0, .stroke_mm = 150, .step_mm = 50, .max_step = 3,
+      .speed_mm_s_x10 = 100, .has_encoder = 1, .step_travel_ms = 5000 },  /* shaft1 */
+    { .index = 1, .stroke_mm = 100, .step_mm = 50, .max_step = 2,
+      .speed_mm_s_x10 = 100, .has_encoder = 0, .step_travel_ms = 5000 },  /* shaft2 */
+};
+
+#endif /* BOARD_REGISTERS_H */

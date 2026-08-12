@@ -1,0 +1,25 @@
+# vendor/ — копии протокольных артефактов
+
+Файлы в этом каталоге **сгенерированы** и вендорятся копией из репозитория Pi:
+
+| Файл | Источник |
+|---|---|
+| `board_registers.h` | `...\Camera\protocol\generated\board_registers.h` |
+| `crc_vectors.json` | `...\Camera\protocol\generated\crc_vectors.json` |
+
+**Руками не править.** Правки вносятся в `protocol/board1_registers.yaml` на стороне Pi, затем
+`python protocol/generate.py`, затем копии обновляются здесь.
+
+Расхождение карты не поймает ни компилятор, ни CI: golden-вектора проверят кодирование кадров,
+но не то, что бит 3 всё ещё кормовой огонь. Единственная защита — `layout_crc` (сейчас `0x2FAF`),
+который прошивка отдаёт в регистре `0x0013`, а сервис на Pi сверяет при старте и при
+несовпадении отказывается отправлять команды.
+
+**Порядок выката: сначала прошить плату, потом обновить сервис.**
+
+Обновление копий:
+
+```
+cp ~/Desktop/Camera/protocol/generated/board_registers.h  vendor/
+cp ~/Desktop/Camera/protocol/generated/crc_vectors.json   vendor/
+```
