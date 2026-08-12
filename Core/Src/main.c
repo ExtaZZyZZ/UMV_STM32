@@ -21,7 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "selftest.h"
+#include "regfile.h"
+#include "uart_link.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -90,7 +92,11 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_Delay(200);                     /* дать терминалу подхватить линию */
+  st_puts("USV board1 boot\r\n");
+  regfile_init();
+  (void)selftest_run();
+  uart_link_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -100,6 +106,10 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    /* Печать «alive» отсюда убрана намеренно: линия теперь занята Modbus.
+     * Отладочные байты вклинивались бы в середину кадров, а HAL_Delay(1000)
+     * задерживал бы ответ на секунду при таймауте мастера в 100 мс. */
+    uart_link_task();
   }
   /* USER CODE END 3 */
 }
@@ -166,9 +176,9 @@ static void MX_USART1_UART_Init(void)
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
   huart1.Init.BaudRate = 115200;
-  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.WordLength = UART_WORDLENGTH_9B;
   huart1.Init.StopBits = UART_STOPBITS_1;
-  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Parity = UART_PARITY_EVEN;
   huart1.Init.Mode = UART_MODE_TX_RX;
   huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart1.Init.OverSampling = UART_OVERSAMPLING_16;
