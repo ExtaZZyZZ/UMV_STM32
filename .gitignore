@@ -1,0 +1,6 @@
+# Артефакты сборки STM32CubeIDE
+Debug/
+Release/
+
+# Локальные настройки рабочего пространства Eclipse
+.settings/
