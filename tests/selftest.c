@@ -12,6 +12,7 @@
 #include "pdu.h"
 #include "regfile.h"
 #include "slave.h"
+#include "command.h"
 
 #include <string.h>
 
@@ -333,8 +334,8 @@ static uint16_t make_req(uint8_t *buf, uint8_t fc, uint16_t start, uint16_t qty)
 static const uint8_t EXPECT_READ_STATE[49] = {
     [0]  = 0x01, [1]  = 0x04, [2]  = 0x2C,   /* адрес, функция, 44 байта данных */
     [40] = 0x02,                             /* регистр 18: proto_ver  = 2      */
-    [41] = 0x2F, [42] = 0xAF,                /* регистр 19: layout_crc = 0x2FAF */
-    [47] = 0x7A, [48] = 0x99,                /* CRC 0x997A, младшим байтом вперёд */
+    [41] = 0xF6, [42] = 0x4B,                /* регистр 19: layout_crc = 0xF64B */
+    [47] = 0x19, [48] = 0x86,                /* CRC 0x8619, младшим байтом вперёд */
 };
 
 static void run_slave_cases(void)
@@ -344,6 +345,11 @@ static void run_slave_cases(void)
     regfile_init();
     fake_ms = 1000u;
     mb_slave_init(&test_slave, &FAKE_OPS, fake_now_ms, SELFTEST_SLAVE_ID);
+
+    /* До первой валидной транзакции связи ещё не было — не путать с
+     * «связь потеряна». Иначе плата отрапортует LINK_OK сразу после подачи
+     * питания и примет команду движения, не зная, есть ли мастер вообще. */
+    st_eq16("slave:link_not_yet", test_slave.link_ever_valid, 0u);
 
     /* Пауза в один тик кадр не закрывает: при часах с шагом 1 мс реально могло
      * пройти почти ноль, и следующий байт того же кадра ещё в пути. */
@@ -443,6 +449,96 @@ static void run_slave_cases(void)
     regfile_init();
 }
 
+/* Собирает кадр FC16 на командный блок: seq, code, arg0, arg1. */
+static uint16_t make_cmd(uint8_t *buf, uint16_t seq, uint16_t code,
+                         uint16_t arg0, uint16_t arg1)
+{
+    buf[0] = SELFTEST_SLAVE_ID;
+    buf[1] = 0x10u;
+    wr_u16be(&buf[2], 0u);                 /* начальный адрес блока */
+    wr_u16be(&buf[4], COMMAND_BLOCK_COUNT);
+    buf[6] = (uint8_t)(COMMAND_BLOCK_COUNT * 2u);
+    wr_u16be(&buf[7],  seq);
+    wr_u16be(&buf[9],  code);
+    wr_u16be(&buf[11], arg0);
+    wr_u16be(&buf[13], arg1);
+    return adu_wrap(buf, 15u);
+}
+
+static void run_command_cases(void)
+{
+    uint16_t v;
+    uint16_t len;
+
+    regfile_init();
+    command_init();
+    mb_slave_init(&test_slave, &FAKE_OPS, fake_now_ms, SELFTEST_SLAVE_ID);
+
+    /* Эталонный кадр из crc_vectors.json: seq=1, BUOY_RELEASE, 500 мс. */
+    feed(F_BUOY_RELEASE, sizeof(F_BUOY_RELEASE), 2u);
+    command_step();
+
+    (void)regfile_read_input(IREG_ACK_SEQ, &v);
+    st_eq16("cmd:buoy/ack_seq", v, 1u);
+    (void)regfile_read_input(IREG_ACK_RESULT, &v);
+    st_eq16("cmd:buoy/ack_result", v, (uint16_t)ACK_RESULT_OK);
+    st_eq16("cmd:buoy/pulse_on", command_buoy_active(), 1u);
+
+    /* ГЛАВНАЯ ПРОВЕРКА ПРОТОКОЛА. Тот же кадр байт в байт — повтор после
+     * таймаута. Круг обязан уйти один раз.
+     *
+     * Ставим метку в ack_result: если дубликат исполнится, он её затрёт
+     * значением OK. Сравнивать сами квитанции бесполезно — у повтора тот же
+     * номер и тот же результат, они одинаковы в обоих случаях. */
+    regfile_set_input(IREG_ACK_RESULT, 0xBEEFu);
+    feed(F_BUOY_REPEAT, sizeof(F_BUOY_REPEAT), 2u);
+    command_step();
+
+    (void)regfile_read_input(IREG_ACK_RESULT, &v);
+    st_eq16("cmd:repeat_not_executed", v, 0xBEEFu);
+
+    /* Новый номер — исполняется. */
+    len = make_cmd(st_scratch, 2u, CMD_CODE_NOP, 0u, 0u);
+    feed(st_scratch, len, 2u);
+    command_step();
+    (void)regfile_read_input(IREG_ACK_SEQ, &v);
+    st_eq16("cmd:new_seq/ack", v, 2u);
+    (void)regfile_read_input(IREG_ACK_RESULT, &v);
+    st_eq16("cmd:new_seq/result", v, (uint16_t)ACK_RESULT_OK);
+
+    /* Неизвестный код. */
+    len = make_cmd(st_scratch, 3u, 0x00FFu, 0u, 0u);
+    feed(st_scratch, len, 2u);
+    command_step();
+    (void)regfile_read_input(IREG_ACK_RESULT, &v);
+    st_eq16("cmd:unknown_code", v, (uint16_t)ACK_RESULT_UNKNOWN_CMD);
+
+    /* Номер оси вне диапазона — проверка аргументов настоящая уже сейчас. */
+    len = make_cmd(st_scratch, 4u, CMD_CODE_AXIS_GOTO, AXIS_COUNT, 0u);
+    feed(st_scratch, len, 2u);
+    command_step();
+    (void)regfile_read_input(IREG_ACK_RESULT, &v);
+    st_eq16("cmd:axis_bad_index", v, (uint16_t)ACK_RESULT_BAD_ARG);
+
+    /* Ось корректная, но связи нет: в тестах uart_link ещё не поднят, и
+     * настоящий слейв обнулён — ровно случай «мастер ни разу не выходил». */
+    len = make_cmd(st_scratch, 5u, CMD_CODE_AXIS_STOP, 0u, 0u);
+    feed(st_scratch, len, 2u);
+    command_step();
+    (void)regfile_read_input(IREG_ACK_RESULT, &v);
+    st_eq16("cmd:axis_link_lost", v, (uint16_t)ACK_RESULT_REFUSED_LINK_LOST);
+
+    /* Нулевая длительность импульса замка. */
+    len = make_cmd(st_scratch, 6u, CMD_CODE_BUOY_RELEASE, 0u, 0u);
+    feed(st_scratch, len, 2u);
+    command_step();
+    (void)regfile_read_input(IREG_ACK_RESULT, &v);
+    st_eq16("cmd:buoy_zero_len", v, (uint16_t)ACK_RESULT_BAD_ARG);
+
+    regfile_init();
+    command_init();
+}
+
 unsigned selftest_run(void)
 {
     st_passed = 0;
@@ -455,6 +551,7 @@ unsigned selftest_run(void)
     run_endian_cases();
     run_regfile_cases();
     run_slave_cases();
+    run_command_cases();
 
     st_puts("selftest: ");
     st_udec(st_passed);

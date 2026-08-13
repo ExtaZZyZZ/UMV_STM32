@@ -79,7 +79,8 @@ void modbus_handler_task(mb_slave_t *s)
 		s->frame_err += 1;
 		return;
 	}
-	s->last_valid_ms = s->now_ms();
+	s->last_valid_ms    = s->now_ms();
+	s->link_ever_valid  = 1u;
 
 	switch (s->frame[1]) {
 	    case MB_FC_READ_HOLDING:

@@ -14,7 +14,7 @@
 
 /* Отдаётся в регистре layout_crc. Мастер сверяет со своим значением и
  * отказывается работать при несовпадении. */
-#define LAYOUT_CRC 0x2FAFu
+#define LAYOUT_CRC 0xF64Bu
 
 #define MODBUS_SLAVE_ADDRESS 1u
 #define MODBUS_BAUD 115200u
@@ -29,19 +29,13 @@
 #define FRAME_GAP_MS 1u
 
 typedef enum {
-    OUT_NAV_TOP = 0,  /* Топовый огонь */
-    OUT_NAV_PORT = 1,  /* Бортовой огонь левый */
-    OUT_NAV_STARBOARD = 2,  /* Бортовой огонь правый */
-    OUT_NAV_STERN = 3,  /* Кормовой огонь */
-    OUT_SPOTLIGHT = 4,  /* Фары дальнего света */
-    OUT_LIGHTBAR = 5,  /* Светодиодная балка */
-    OUT_SGU_LIGHT = 6,  /* СГУ «КОЛУМБ» синий */
-    OUT_AUDIO_ENABLE = 7,  /* Питание/канал усилителя */
+    OUT_SPOTLIGHT = 0,  /* Фары дальнего света */
+    OUT_LIGHTBAR = 1,  /* Светодиодная балка */
+    OUT_SGU_LIGHT = 2,  /* СГУ «КОЛУМБ» синий */
 } out_t;
 
 typedef enum {
     IN_BUOY_DEPLOYED = 0,  /* Концевик системы сброса круга */
-    IN_ESTOP = 1,  /* Грибовидная красная кнопка */
 } in_t;
 
 typedef enum {
@@ -116,8 +110,8 @@ typedef enum {
     STATUS_FLAG_ENCODER_OK = 2,
 } status_flag_t;
 
-#define OUT_BIT_COUNT 8u
-#define IN_BIT_COUNT 2u
+#define OUT_BIT_COUNT 3u
+#define IN_BIT_COUNT 1u
 #define HREG_COUNT 5u
 #define IREG_COUNT 22u
 
@@ -139,10 +133,10 @@ typedef struct {
 #define AXIS_COUNT 2u
 
 static const axis_spec_t AXIS_SPECS[AXIS_COUNT] = {
-    { .index = 0, .stroke_mm = 150, .step_mm = 50, .max_step = 3,
-      .speed_mm_s_x10 = 100, .has_encoder = 1, .step_travel_ms = 5000 },  /* shaft1 */
-    { .index = 1, .stroke_mm = 100, .step_mm = 50, .max_step = 2,
-      .speed_mm_s_x10 = 100, .has_encoder = 0, .step_travel_ms = 5000 },  /* shaft2 */
+    { .index = 0, .stroke_mm = 150, .step_mm = 1, .max_step = 150,
+      .speed_mm_s_x10 = 100, .has_encoder = 1, .step_travel_ms = 100 },  /* shaft1 */
+    { .index = 1, .stroke_mm = 100, .step_mm = 100, .max_step = 1,
+      .speed_mm_s_x10 = 100, .has_encoder = 0, .step_travel_ms = 10000 },  /* shaft2 */
 };
 
 #endif /* BOARD_REGISTERS_H */

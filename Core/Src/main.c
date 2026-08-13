@@ -24,6 +24,9 @@
 #include "selftest.h"
 #include "regfile.h"
 #include "uart_link.h"
+#include "command.h"
+#include "sched.h"
+#include "sched.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -97,6 +100,8 @@ int main(void)
   regfile_init();
   (void)selftest_run();
   uart_link_init();
+  command_init();
+  sched_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -106,10 +111,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    /* Печать «alive» отсюда убрана намеренно: линия теперь занята Modbus.
-     * Отладочные байты вклинивались бы в середину кадров, а HAL_Delay(1000)
-     * задерживал бы ответ на секунду при таймауте мастера в 100 мс. */
-    uart_link_task();
+    sched_step();
   }
   /* USER CODE END 3 */
 }

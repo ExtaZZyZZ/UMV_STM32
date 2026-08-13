@@ -13,6 +13,7 @@
 """
 import argparse
 import sys
+import time
 
 import serial
 
@@ -33,6 +34,17 @@ EXCEPTIONS = {
     0x02: "Illegal Data Address",
     0x03: "Illegal Data Value",
 }
+
+ACK_RESULTS = {
+    0: "OK",
+    1: "BAD_ARG",
+    2: "REFUSED_SAFETY",
+    3: "REFUSED_BUSY",
+    4: "REFUSED_LINK_LOST",
+    5: "UNKNOWN_CMD",
+}
+
+CMD_BUOY_RELEASE = 1
 
 
 def crc16(data: bytes) -> int:
@@ -95,13 +107,119 @@ def show_registers(reply: bytes, names: list[str]) -> None:
         print(f"  [{i:2d}] {name:<18} {value:6d}  0x{value:04X}{mark}")
 
 
+def _poll_regs(link: serial.Serial) -> list[int] | None:
+    """Читает 22 входных регистра на уже открытом порту."""
+    link.reset_input_buffer()
+    link.write(wrap(bytes([SLAVE, 0x04, 0x00, 0x00, 0x00, 22])))
+    reply = link.read(49)
+    if len(reply) != 49 or crc16(reply[:-2]) != int.from_bytes(reply[-2:], "little"):
+        return None
+    return [int.from_bytes(reply[3 + i * 2:5 + i * 2], "big") for i in range(22)]
+
+
+def send_command(port: str, code: int, arg0: int, arg1: int, twice: bool) -> int:
+    """Отправляет команду с рукопожатием — так же, как это делает сервис на Pi.
+
+    Порядок по протоколу: увеличить cmd_seq, записать блок одной FC16,
+    опрашивать телеметрию, пока ack_seq не совпадёт с отправленным.
+    """
+    with serial.Serial(port, BAUD, bytesize=8, parity=serial.PARITY_EVEN,
+                       stopbits=1, timeout=0.3) as link:
+        regs = _poll_regs(link)
+        if regs is None:
+            print("Плата не отвечает на опрос телеметрии.")
+            return 1
+
+        seq = (regs[0] + 1) & 0xFFFF or 1        # 0 зарезервирован под «команд не было»
+        body = (bytes([SLAVE, 0x10, 0x00, 0x00, 0x00, 4, 8])
+                + seq.to_bytes(2, "big") + code.to_bytes(2, "big")
+                + arg0.to_bytes(2, "big") + arg1.to_bytes(2, "big"))
+        frame = wrap(body)
+
+        attempts = 2 if twice else 1
+        for n in range(attempts):
+            label = "повтор того же кадра" if n else "команда"
+            print(f"\n{label}: seq={seq} code={code} arg0={arg0} arg1={arg1}")
+            print(f"-> {frame.hex(' ').upper()}")
+            link.reset_input_buffer()
+            link.write(frame)
+            reply = link.read(8)
+            print(f"<- {reply.hex(' ').upper() if reply else '(тишина)'}")
+
+            for _ in range(5):
+                time.sleep(0.05)
+                regs = _poll_regs(link)
+                if regs and regs[0] == seq:
+                    result = ACK_RESULTS.get(regs[1], f"неизвестно ({regs[1]})")
+                    print(f"   ack_seq={regs[0]}  ack_result={regs[1]} {result}")
+                    break
+            else:
+                print("   квитанция не пришла")
+
+    if twice:
+        print("\nОба кадра байт в байт одинаковы, квитанция после повтора та же.")
+        print("Так это и должно выглядеть со стороны мастера: повтор безопасен,")
+        print("номер и результат не меняются.")
+        print("Заметь: сама по себе одинаковая квитанция ещё не доказывает, что")
+        print("исполнение было однократным — при переисполнении она выглядела бы")
+        print("так же. Однократность доказывает selftest (cmd:repeat_not_executed),")
+        print("а на железе её будет видно по катушке, когда появится пин.")
+    return 0
+
+
+def watch(port: str) -> None:
+    """Непрерывный опрос 20 Гц — так же, как это делает сервис на Pi.
+
+    Отдельными запусками скрипта LINK_OK не увидеть: старт интерпретатора
+    занимает больше 500 мс, и таймаут связи успевает истечь между ними.
+    """
+    request = wrap(bytes([SLAVE, 0x04, 0x00, 0x00, 0x00, 22]))
+    print("Опрос 20 Гц. Ctrl+C для выхода.\n")
+
+    with serial.Serial(port, BAUD, bytesize=8, parity=serial.PARITY_EVEN,
+                       stopbits=1, timeout=0.2) as link:
+        polls = errors = 0
+        while True:
+            link.reset_input_buffer()
+            link.write(request)
+            reply = link.read(49)
+            polls += 1
+
+            if len(reply) != 49 or crc16(reply[:-2]) != int.from_bytes(reply[-2:], "little"):
+                errors += 1
+            else:
+                reg = [int.from_bytes(reply[3 + i * 2:5 + i * 2], "big") for i in range(22)]
+                uptime = (reg[14] << 16) | reg[13]
+                flags = reg[4]
+                link_ok = "LINK_OK" if flags & 1 else "-------"
+                print(f"\ruptime {uptime / 1000:8.1f} с   flags 0x{flags:04X} {link_ok}   "
+                      f"crc_err {reg[15]:<4d} frame_err {reg[16]:<4d} "
+                      f"do_actual 0x{reg[2]:02X}   опросов {polls}, сбоев {errors}",
+                      end="", flush=True)
+
+            time.sleep(0.05)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", nargs="?", default="state",
-                        choices=["state", "holding", "outputs"])
+                        choices=["state", "holding", "outputs", "watch", "buoy"])
     parser.add_argument("value", nargs="?", type=lambda s: int(s, 0))
     parser.add_argument("--port", default="COM8")
+    parser.add_argument("--twice", action="store_true",
+                        help="послать тот же кадр дважды — проверка защиты от повтора")
     args = parser.parse_args()
+
+    if args.command == "buoy":
+        duration = args.value if args.value is not None else 500
+        return send_command(args.port, CMD_BUOY_RELEASE, duration, 0, args.twice)
+
+    if args.command == "watch":
+        try:
+            watch(args.port)
+        except KeyboardInterrupt:
+            print()
+        return 0
 
     if args.command == "state":
         request = wrap(bytes([SLAVE, 0x04, 0x00, 0x00, 0x00, 22]))
