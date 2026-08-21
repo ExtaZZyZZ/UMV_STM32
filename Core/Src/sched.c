@@ -4,6 +4,8 @@
 #include "uart_link.h"
 #include "telemetry.h"
 #include "command.h"
+#include "outputs.h"
+#include "axis.h"
 
 
 static uint32_t serviced;     
@@ -20,7 +22,10 @@ static const sched_task_t TASKS[] = {
    
     {  1u,    0u, uart_link_task     },  // частота работы modbus 1000 Гц
     {  1u,    0u, command_pulse_step },  // снятие импульса замка, 1000 Гц
+    {  1u,    0u, axis_failsafe_step },  // снятие моста при потере связи, 1000 Гц
+    {  5u,    2u, axis_step          },  // автоматы осей, 200 Гц
     { 20u,    0u, command_step       },  // исполнение команд, 50 Гц
+    { 20u,    5u, outputs_step       },  // раскладка маски по ногам, 50 Гц
     { 20u,   10u, telemetry_step     },  // обновление телеметрии, 50 Гц
 };
 

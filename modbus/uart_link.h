@@ -24,4 +24,8 @@ void uart_link_task(void);
 /* Для диагностики и для будущего regfile_update. */
 mb_slave_t *uart_link_slave(void);
 
+/* Была ли валидная транзакция за последние LINK_TIMEOUT_MS. Один ответ на
+ * вопрос «связь есть» для телеметрии, команд и failsafe осей. */
+uint8_t uart_link_is_up(void);
+
 #endif /* MODBUS_UART_LINK_H */

@@ -13,6 +13,7 @@
 #include "regfile.h"
 #include "slave.h"
 #include "command.h"
+#include "outputs.h"
 
 #include <string.h>
 
@@ -23,7 +24,7 @@ extern UART_HandleTypeDef huart1;
 static unsigned st_passed;
 static unsigned st_failed;
 
-/* ------------------------------------------------------------------ печать */
+
 
 void st_puts(const char *s)
 {
@@ -116,15 +117,21 @@ static const uint8_t F_READ_STATE[] = {
 static const uint8_t F_WRITE_OUTPUTS[] = {
     0x01, 0x06, 0x00, 0x04, 0x00, 0x0F, 0x88, 0x0F
 };
-static const uint8_t F_BUOY_RELEASE[] = {
+/* seq=1, RELEASE, arg0=0 (ПС №1), arg1=500 мс. */
+static const uint8_t F_RELEASE[] = {
     0x01, 0x10, 0x00, 0x00, 0x00, 0x04, 0x08,
-    0x00, 0x01, 0x00, 0x01, 0x01, 0xF4, 0x00, 0x00, 0xDB, 0x74
+    0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x01, 0xF4, 0x9B, 0x6D
 };
 /* Байт в байт тот же кадр — повтор после таймаута. На уровне кадрирования он
  * неотличим от первого, и это правильно: дедуп по cmd_seq делает command.c. */
-static const uint8_t F_BUOY_REPEAT[] = {
+static const uint8_t F_RELEASE_REPEAT[] = {
     0x01, 0x10, 0x00, 0x00, 0x00, 0x04, 0x08,
-    0x00, 0x01, 0x00, 0x01, 0x01, 0xF4, 0x00, 0x00, 0xDB, 0x74
+    0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x01, 0xF4, 0x9B, 0x6D
+};
+/* Та же команда, другой номер устройства: seq=2, arg0=1 (ПС №2). */
+static const uint8_t F_RELEASE_SECOND[] = {
+    0x01, 0x10, 0x00, 0x00, 0x00, 0x04, 0x08,
+    0x00, 0x02, 0x00, 0x01, 0x00, 0x01, 0x01, 0xF4, 0xF9, 0xAD
 };
 static const uint8_t F_AXIS_GOTO[] = {
     0x01, 0x10, 0x00, 0x00, 0x00, 0x04, 0x08,
@@ -144,8 +151,9 @@ typedef struct {
 static const frame_case_t FRAME_CASES[] = {
     { "read_state",      F_READ_STATE,     8u,  5u },
     { "write_outputs",   F_WRITE_OUTPUTS,  8u,  5u },
-    { "buoy_release",    F_BUOY_RELEASE,  17u, 14u },
-    { "buoy_repeat",     F_BUOY_REPEAT,   17u, 14u },
+    { "release",         F_RELEASE,        17u, 14u },
+    { "release_repeat",  F_RELEASE_REPEAT, 17u, 14u },
+    { "release_second",  F_RELEASE_SECOND, 17u, 14u },
     { "axis_goto",       F_AXIS_GOTO,     17u, 14u },
     { "exception",       F_EXCEPTION,      5u,  2u },
 };
@@ -333,9 +341,9 @@ static uint16_t make_req(uint8_t *buf, uint8_t fc, uint16_t start, uint16_t qty)
  * Не перечисленные элементы — нули, за это отвечает инициализация массива. */
 static const uint8_t EXPECT_READ_STATE[49] = {
     [0]  = 0x01, [1]  = 0x04, [2]  = 0x2C,   /* адрес, функция, 44 байта данных */
-    [40] = 0x02,                             /* регистр 18: proto_ver  = 2      */
-    [41] = 0xF6, [42] = 0x4B,                /* регистр 19: layout_crc = 0xF64B */
-    [47] = 0x19, [48] = 0x86,                /* CRC 0x8619, младшим байтом вперёд */
+    [40] = 0x03,                             /* регистр 18: proto_ver  = 3      */
+    [41] = 0xF7, [42] = 0xC9,                /* регистр 19: layout_crc = 0xF7C9 */
+    [47] = 0x70, [48] = 0x89,                /* CRC 0x8970, младшим байтом вперёд */
 };
 
 static void run_slave_cases(void)
@@ -421,10 +429,10 @@ static void run_slave_cases(void)
     feed(st_scratch, len, 2u);
     st_eq16("slave:fc06/out_of_range", cap_buf[2], 0x02u);
 
-    /* FC16 на эталонном кадре buoy_release: cmd_seq=1, cmd_code=1, arg0=500.
+    /* FC16 на эталонном кадре release: cmd_seq=1, cmd_code=1, arg0=0, arg1=500.
      * Ответ подтверждает блок и данные не возвращает — 8 байт. */
     regfile_init();
-    feed(F_BUOY_RELEASE, sizeof(F_BUOY_RELEASE), 2u);
+    feed(F_RELEASE, sizeof(F_RELEASE), 2u);
     st_eq16("slave:fc16/len",      cap_len, 8u);
     st_eq16("slave:fc16/start",    rd_u16be(&cap_buf[2]), 0x0000u);
     st_eq16("slave:fc16/qty",      rd_u16be(&cap_buf[4]), 0x0004u);
@@ -433,17 +441,17 @@ static void run_slave_cases(void)
     st_eq16("slave:fc16/cmd_arg0", regfile_get_holding(HREG_CMD_ARG0), 500u);
 
     /* Счётчик байт не сходится с количеством — запрос испорчен. */
-    memcpy(st_scratch, F_BUOY_RELEASE, sizeof(F_BUOY_RELEASE));
+    memcpy(st_scratch, F_RELEASE, sizeof(F_RELEASE));
     st_scratch[6] = 0x06u;                                  /* было 8 */
-    (void)adu_wrap(st_scratch, sizeof(F_BUOY_RELEASE) - 2u); /* пересчитать CRC */
-    feed(st_scratch, sizeof(F_BUOY_RELEASE), 2u);
+    (void)adu_wrap(st_scratch, sizeof(F_RELEASE) - 2u); /* пересчитать CRC */
+    feed(st_scratch, sizeof(F_RELEASE), 2u);
     st_eq16("slave:fc16/bad_count", cap_buf[2], 0x03u);
 
     /* Блок не помещается в пространство holding. */
-    memcpy(st_scratch, F_BUOY_RELEASE, sizeof(F_BUOY_RELEASE));
+    memcpy(st_scratch, F_RELEASE, sizeof(F_RELEASE));
     wr_u16be(&st_scratch[2], HREG_COUNT - 1u);              /* start у самого края */
-    (void)adu_wrap(st_scratch, sizeof(F_BUOY_RELEASE) - 2u);
-    feed(st_scratch, sizeof(F_BUOY_RELEASE), 2u);
+    (void)adu_wrap(st_scratch, sizeof(F_RELEASE) - 2u);
+    feed(st_scratch, sizeof(F_RELEASE), 2u);
     st_eq16("slave:fc16/out_of_range", cap_buf[2], 0x02u);
 
     regfile_init();
@@ -474,24 +482,28 @@ static void run_command_cases(void)
     command_init();
     mb_slave_init(&test_slave, &FAKE_OPS, fake_now_ms, SELFTEST_SLAVE_ID);
 
-    /* Эталонный кадр из crc_vectors.json: seq=1, BUOY_RELEASE, 500 мс. */
-    feed(F_BUOY_RELEASE, sizeof(F_BUOY_RELEASE), 2u);
+    /* Эталонный кадр из crc_vectors.json: seq=1, RELEASE, ПС №1, 500 мс. */
+    feed(F_RELEASE, sizeof(F_RELEASE), 2u);
     command_step();
 
     (void)regfile_read_input(IREG_ACK_SEQ, &v);
-    st_eq16("cmd:buoy/ack_seq", v, 1u);
+    st_eq16("cmd:release/ack_seq", v, 1u);
     (void)regfile_read_input(IREG_ACK_RESULT, &v);
-    st_eq16("cmd:buoy/ack_result", v, (uint16_t)ACK_RESULT_OK);
-    st_eq16("cmd:buoy/pulse_on", command_buoy_active(), 1u);
+    st_eq16("cmd:release/ack_result", v, (uint16_t)ACK_RESULT_OK);
+    st_eq16("cmd:release/pulse_on", command_release_active(0u), 1u);
+
+    /* Второе устройство ещё не тронуто: импульс подан ровно одному. Иначе
+     * сброс одного ПС уводил бы оба. */
+    st_eq16("cmd:release/other_idle", command_release_active(1u), 0u);
 
     /* ГЛАВНАЯ ПРОВЕРКА ПРОТОКОЛА. Тот же кадр байт в байт — повтор после
-     * таймаута. Круг обязан уйти один раз.
+     * таймаута. ПС обязано сброситься один раз.
      *
      * Ставим метку в ack_result: если дубликат исполнится, он её затрёт
      * значением OK. Сравнивать сами квитанции бесполезно — у повтора тот же
      * номер и тот же результат, они одинаковы в обоих случаях. */
     regfile_set_input(IREG_ACK_RESULT, 0xBEEFu);
-    feed(F_BUOY_REPEAT, sizeof(F_BUOY_REPEAT), 2u);
+    feed(F_RELEASE_REPEAT, sizeof(F_RELEASE_REPEAT), 2u);
     command_step();
 
     (void)regfile_read_input(IREG_ACK_RESULT, &v);
@@ -529,14 +541,78 @@ static void run_command_cases(void)
     st_eq16("cmd:axis_link_lost", v, (uint16_t)ACK_RESULT_REFUSED_LINK_LOST);
 
     /* Нулевая длительность импульса замка. */
-    len = make_cmd(st_scratch, 6u, CMD_CODE_BUOY_RELEASE, 0u, 0u);
+    len = make_cmd(st_scratch, 6u, CMD_CODE_RELEASE, 0u, 0u);
     feed(st_scratch, len, 2u);
     command_step();
     (void)regfile_read_input(IREG_ACK_RESULT, &v);
-    st_eq16("cmd:buoy_zero_len", v, (uint16_t)ACK_RESULT_BAD_ARG);
+    st_eq16("cmd:release_zero_len", v, (uint16_t)ACK_RESULT_BAD_ARG);
+
+    /* Эталонный кадр второго устройства: номер обязан доехать до нужной
+     * катушки. Перепутанный arg0 сбросил бы не то ПС, и снаружи это выглядело
+     * бы исправной работой. */
+    feed(F_RELEASE_SECOND, sizeof(F_RELEASE_SECOND), 2u);
+    command_step();
+    (void)regfile_read_input(IREG_ACK_RESULT, &v);
+    st_eq16("cmd:release2/ack_result", v, (uint16_t)ACK_RESULT_OK);
+    st_eq16("cmd:release2/pulse_on", command_release_active(1u), 1u);
+
+    /* Номер устройства вне диапазона. */
+    len = make_cmd(st_scratch, 7u, CMD_CODE_RELEASE, RELEASE_COUNT, 500u);
+    feed(st_scratch, len, 2u);
+    command_step();
+    (void)regfile_read_input(IREG_ACK_RESULT, &v);
+    st_eq16("cmd:release_bad_unit", v, (uint16_t)ACK_RESULT_BAD_ARG);
+
+    /* Длительность выше потолка из карты. */
+    len = make_cmd(st_scratch, 8u, CMD_CODE_RELEASE, 0u,
+                   (uint16_t)(RELEASE_SPECS[0].pulse_ms_max + 1u));
+    feed(st_scratch, len, 2u);
+    command_step();
+    (void)regfile_read_input(IREG_ACK_RESULT, &v);
+    st_eq16("cmd:release_too_long", v, (uint16_t)ACK_RESULT_BAD_ARG);
 
     regfile_init();
     command_init();
+}
+
+static void run_outputs_cases(void)
+{
+    uint16_t v;
+
+    regfile_init();
+    outputs_init();
+
+    /* После инициализации всё погашено. */
+    outputs_step();
+    (void)regfile_read_input(IREG_DO_ACTUAL, &v);
+    st_eq16("out:idle_off", v, 0u);
+
+    /* Обычная маска: фары и балка. */
+    (void)regfile_write_holding(HREG_OUTPUTS, 0x0003u);
+    outputs_step();
+    (void)regfile_read_input(IREG_DO_ACTUAL, &v);
+    st_eq16("out:mask_mirrored", v, 0x0003u);
+    st_eq16("out:actual_matches", outputs_actual(), 0x0003u);
+
+    /* Мастер прислал мусор во все шестнадцать бит. Отдать это же значение в
+     * do_actual нельзя: Pi увидел бы включёнными выходы, которых нет. */
+    (void)regfile_write_holding(HREG_OUTPUTS, 0xFFFFu);
+    outputs_step();
+    (void)regfile_read_input(IREG_DO_ACTUAL, &v);
+    st_eq16("out:extra_bits_dropped", v, (uint16_t)((1u << OUT_BIT_COUNT) - 1u));
+
+    /* Failsafe: при потере связи outputs не трогается. Проверяем бездействие —
+     * маска обязана пережить любое число вызовов без мастера на линии. */
+    (void)regfile_write_holding(HREG_OUTPUTS, 0x0005u);
+    outputs_step();
+    for (unsigned i = 0; i < 50u; i++) {
+        outputs_step();
+    }
+    (void)regfile_read_input(IREG_DO_ACTUAL, &v);
+    st_eq16("out:survives_link_loss", v, 0x0005u);
+
+    regfile_init();
+    outputs_init();
 }
 
 unsigned selftest_run(void)
@@ -552,6 +628,7 @@ unsigned selftest_run(void)
     run_regfile_cases();
     run_slave_cases();
     run_command_cases();
+    run_outputs_cases();
 
     st_puts("selftest: ");
     st_udec(st_passed);

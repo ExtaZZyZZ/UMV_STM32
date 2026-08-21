@@ -59,6 +59,12 @@ mb_slave_t *uart_link_slave(void)
     return &slave;
 }
 
+uint8_t uart_link_is_up(void)
+{
+    return (uint8_t)(slave.link_ever_valid &&
+                     ((HAL_GetTick() - slave.last_valid_ms) < LINK_TIMEOUT_MS));
+}
+
 void uart_receive_isr(void) 
 {
     const uint32_t isr = huart1.Instance->ISR;

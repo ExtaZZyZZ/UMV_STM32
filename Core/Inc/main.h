@@ -49,6 +49,8 @@ extern "C" {
 
 /* USER CODE END EM */
 
+void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
+
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
@@ -57,6 +59,26 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define AXIS1_EN_Pin GPIO_PIN_2
+#define AXIS1_EN_GPIO_Port GPIOF
+#define UNDERWATER_Pin GPIO_PIN_0
+#define UNDERWATER_GPIO_Port GPIOB
+#define SPOTLIGHT_Pin GPIO_PIN_1
+#define SPOTLIGHT_GPIO_Port GPIOB
+#define LIGHTBAR_Pin GPIO_PIN_2
+#define LIGHTBAR_GPIO_Port GPIOB
+#define SGU_LIGHT_Pin GPIO_PIN_12
+#define SGU_LIGHT_GPIO_Port GPIOB
+#define LOCK1_Pin GPIO_PIN_13
+#define LOCK1_GPIO_Port GPIOB
+#define LOCK2_Pin GPIO_PIN_15
+#define LOCK2_GPIO_Port GPIOB
+#define RELEASE1_DEPLOYED_Pin GPIO_PIN_0
+#define RELEASE1_DEPLOYED_GPIO_Port GPIOD
+#define RELEASE2_DEPLOYED_Pin GPIO_PIN_1
+#define RELEASE2_DEPLOYED_GPIO_Port GPIOD
+#define AXIS0_EN_Pin GPIO_PIN_9
+#define AXIS0_EN_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
