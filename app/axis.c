@@ -22,6 +22,11 @@ extern TIM_HandleTypeDef htim1;
 
 #define AXIS_STEP_UNKNOWN 0xFFFFu   /* на проводе -1 из README */
 
+#define AXIS_TRIP_CONFIRM_MS  150u
+#define AXIS_TRIP_BLIND_MS    (AXIS_DWELL_MS + AXIS_RAMP_MS)  /* 250 мс */
+#define ISENSE_ACTIVE_HIGH      1u
+
+
 typedef enum { DIR_NONE = 0, DIR_EXTEND, DIR_RETRACT } dir_t;
 
 typedef struct {
@@ -37,16 +42,27 @@ static const axis_pins_t AXIS_PINS[] = {
     [1] = { AXIS1_EN_GPIO_Port, AXIS1_EN_Pin, TIM_CHANNEL_3, TIM_CHANNEL_4 },
 };
 
+static const struct {
+	GPIO_TypeDef *port;
+	uint16_t pin;
+} ISENSE_PINS[AXIS_COUNT][2] = {
+		[0] = {{NULL, 0u}, {NULL, 0u}},
+		[1] = { { ISENSE_R_GPIO_Port, ISENSE_R_Pin },
+	            { ISENSE_L_GPIO_Port, ISENSE_L_Pin } },
+};
 
 typedef struct {
-    uint8_t  state;                 /* axis_state_t */
-    uint8_t  fault;                 /* axis_fault_t */
-    uint8_t  dir;                   /* dir_t текущего движения */
-    uint16_t step;                  /* AXIS_STEP_UNKNOWN до homing */
+    uint8_t  state;
+    uint8_t  fault;
+    uint8_t  dir;
+    uint16_t step;
     uint16_t from_step;
     uint16_t target;
-    uint32_t start_ms;              /* момент команды, вместе с выбегом */
-    uint32_t travel_ms;             /* сколько держать ход после выбега */
+    uint32_t start_ms;
+    uint32_t travel_ms;
+    uint8_t  trip_run;
+    uint8_t  trip_armed;
+    uint32_t trip_since;
 } axis_t;
 
 static axis_t   ax[AXIS_COUNT];
@@ -65,6 +81,16 @@ static void axis_apply(unsigned i, dir_t dir, uint32_t duty)
                       (dir == DIR_NONE) ? GPIO_PIN_RESET : GPIO_PIN_SET);
 }
 
+static void axis_publish(unsigned i, uint16_t pos_mm_x10)
+{
+    const uint16_t base = (uint16_t)(IREG_AXIS0_STATE + 4u * i);
+
+    regfile_set_input((ireg_t)(base + 0u), ax[i].state);
+    regfile_set_input((ireg_t)(base + 1u), ax[i].step);
+    regfile_set_input((ireg_t)(base + 2u), pos_mm_x10);
+    regfile_set_input((ireg_t)(base + 3u), ax[i].fault);
+}
+
 static uint32_t ramp_duty(uint32_t run_ms)
 {
     const uint32_t min = duty_full * AXIS_DUTY_MIN_PCT / 100u;
@@ -75,12 +101,59 @@ static uint32_t ramp_duty(uint32_t run_ms)
     return min + ((duty_full - min) * run_ms) / AXIS_RAMP_MS;
 }
 
-/* --------------------------------------------------------------- состояние */
+static uint8_t isense_active(unsigned i, dir_t dir)
+{
+    if (dir == DIR_NONE) {
+        return 0u;
+    }
+
+    const unsigned slot = (dir == DIR_EXTEND) ? 0u : 1u;
+    GPIO_TypeDef  *port = ISENSE_PINS[i][slot].port;
+
+    if (port == NULL) {
+        return 0u;
+    }
+
+    const uint8_t high = (HAL_GPIO_ReadPin(port, ISENSE_PINS[i][slot].pin) == GPIO_PIN_SET);
+    return ISENSE_ACTIVE_HIGH ? high : (uint8_t)!high;
+}
 
 static uint16_t step_to_mm_x10(unsigned i, uint16_t step)
 {
     return (uint16_t)((uint32_t)step * AXIS_SPECS[i].step_mm * 10u);
 }
+
+static void motion_done(unsigned i)
+{
+    axis_apply(i, DIR_NONE, 0u);
+    ax[i].dir   = DIR_NONE;
+    ax[i].step  = ax[i].target;
+    ax[i].state = AXIS_STATE_IDLE;
+    axis_publish(i, step_to_mm_x10(i, ax[i].step));
+}
+
+
+
+static void motion_fault(unsigned i, uint8_t fault)
+{
+    axis_apply(i, DIR_NONE, 0u);
+    ax[i].dir   = DIR_NONE;
+    ax[i].step  = AXIS_STEP_UNKNOWN;
+    ax[i].state = AXIS_STATE_FAULT;
+    ax[i].fault = fault;
+    axis_publish(i, 0u);
+}
+
+static void motion_trip(unsigned i)
+{
+    if (ax[i].state == AXIS_STATE_HOMING) {
+        motion_done(i);
+        return;
+    }
+    motion_fault(i, AXIS_FAULT_STALL);
+}
+
+
 
 static uint32_t stroke_travel_ms(unsigned i)
 {
@@ -92,27 +165,11 @@ static uint8_t axis_busy(unsigned i)
     return (ax[i].state == AXIS_STATE_MOVING) || (ax[i].state == AXIS_STATE_HOMING);
 }
 
-static void axis_publish(unsigned i, uint16_t pos_mm_x10)
-{
-    const uint16_t base = (uint16_t)(IREG_AXIS0_STATE + 4u * i);
 
-    regfile_set_input((ireg_t)(base + 0u), ax[i].state);
-    regfile_set_input((ireg_t)(base + 1u), ax[i].step);
-    regfile_set_input((ireg_t)(base + 2u), pos_mm_x10);
-    regfile_set_input((ireg_t)(base + 3u), ax[i].fault);
-}
 
-/* Ход завершён штатно: положение известно ровно в этот момент. */
-static void motion_done(unsigned i)
-{
-    axis_apply(i, DIR_NONE, 0u);
-    ax[i].dir   = DIR_NONE;
-    ax[i].step  = ax[i].target;
-    ax[i].state = AXIS_STATE_IDLE;
-    axis_publish(i, step_to_mm_x10(i, ax[i].step));
-}
 
-/* Ход прерван: без обратной связи угадать, где встал шток, нельзя. */
+
+
 static void motion_abort(unsigned i)
 {
     axis_apply(i, DIR_NONE, 0u);
@@ -134,8 +191,9 @@ static uint16_t motion_start(unsigned i, dir_t dir, uint16_t target,
     ax[i].travel_ms = travel_ms;
     ax[i].start_ms  = HAL_GetTick();
     ax[i].state     = state;
-
-    axis_apply(i, DIR_NONE, 0u);    /* обязательный выбег перед троганием */
+    ax[i].trip_run   = 0u;
+    ax[i].trip_armed = (uint8_t)!isense_active(i, dir);
+    axis_apply(i, DIR_NONE, 0u);
     return ACK_RESULT_OK;
 }
 
@@ -143,21 +201,22 @@ static uint16_t motion_start(unsigned i, dir_t dir, uint16_t target,
 
 void axis_init(void)
 {
-    /* Период считаем от факта: переедет тактирование — частота ШИМ останется. */
+
     uint32_t timclk = HAL_RCC_GetPCLK2Freq();
     if ((RCC->CFGR & RCC_CFGR_PPRE2) != 0u) {
-        timclk *= 2u;               /* правило удвоения при делителе APB2 > 1 */
+        timclk *= 2u;
     }
     duty_full = timclk / AXIS_PWM_HZ;
     __HAL_TIM_SET_AUTORELOAD(&htim1, duty_full - 1u);
 
-    /* Сначала MOE при нулевых CCR, и только потом что-либо трогает EN. */
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
-
     for (unsigned i = 0; i < AXIS_COUNT; i++) {
+        ax[i].trip_run   = 0u;
+        ax[i].trip_armed = 0u;
+        ax[i].trip_since = 0u;
         ax[i].state     = AXIS_STATE_UNKNOWN;
         ax[i].fault     = AXIS_FAULT_NONE;
         ax[i].dir       = DIR_NONE;
@@ -169,6 +228,14 @@ void axis_init(void)
         axis_apply(i, DIR_NONE, 0u);
         axis_publish(i, 0u);
     }
+}
+
+static uint8_t isense_present(unsigned i, dir_t dir)
+{
+    if (dir == DIR_NONE) {
+        return 0u;
+    }
+    return (uint8_t)(ISENSE_PINS[i][(dir == DIR_EXTEND) ? 0u : 1u].port != NULL);
 }
 
 void axis_step(void)
@@ -190,13 +257,27 @@ void axis_step(void)
         const uint32_t run = elapsed - AXIS_DWELL_MS;
 
         if (run >= ax[i].travel_ms) {
-            motion_done(i);
+            if ((ax[i].state == AXIS_STATE_HOMING) && ax[i].trip_armed
+                && isense_present(i, (dir_t)ax[i].dir)) {
+                motion_fault(i, AXIS_FAULT_TIMEOUT);   /* ждали упор, не дождались */
+            } else {
+                motion_done(i);
+            }
             continue;
         }
 
         axis_apply(i, (dir_t)ax[i].dir, ramp_duty(run));
-
-        
+        if (ax[i].trip_armed && (elapsed >= AXIS_TRIP_BLIND_MS)) {
+            if (!isense_active(i, (dir_t)ax[i].dir)) {
+                ax[i].trip_run = 0u;
+            } else if (!ax[i].trip_run) {
+                ax[i].trip_run   = 1u;
+                ax[i].trip_since = now;
+            } else if ((now - ax[i].trip_since) >= AXIS_TRIP_CONFIRM_MS) {
+                motion_trip(i);
+                continue;
+            }
+        }
         uint16_t pos = 0u;
         if (ax[i].state == AXIS_STATE_MOVING) {
             const int32_t from = step_to_mm_x10(i, ax[i].from_step);

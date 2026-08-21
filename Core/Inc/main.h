@@ -77,8 +77,12 @@ void Error_Handler(void);
 #define RELEASE1_DEPLOYED_GPIO_Port GPIOD
 #define RELEASE2_DEPLOYED_Pin GPIO_PIN_1
 #define RELEASE2_DEPLOYED_GPIO_Port GPIOD
+#define ISENSE_L_Pin GPIO_PIN_7
+#define ISENSE_L_GPIO_Port GPIOB
 #define AXIS0_EN_Pin GPIO_PIN_9
 #define AXIS0_EN_GPIO_Port GPIOB
+#define ISENSE_R_Pin GPIO_PIN_0
+#define ISENSE_R_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
 
