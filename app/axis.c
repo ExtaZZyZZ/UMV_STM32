@@ -16,9 +16,9 @@
 #define AXIS_STEP_UNKNOWN 0xFFFFu
 #define AXIS_TIMEOUT_MARGIN_PCT 50u
 
-/* 0 — на датчик тока не смотрим, ход только по времени. Рабочая версия
- * без датчика лежит в коммите 917bca7. */
-#define AXIS_USE_ISENSE 1u
+/* 0 — на датчик тока не смотрим, ход только по времени. Версия с включённым
+ * детектом лежит в коммите eab0601, вернуть когда вход IS будет исправен. */
+#define AXIS_USE_ISENSE 0u
 
 #define AXIS_BOOT_HOME 1u
 
