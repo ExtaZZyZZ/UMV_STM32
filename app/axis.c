@@ -16,9 +16,9 @@
 #define AXIS_STEP_UNKNOWN 0xFFFFu
 #define AXIS_TIMEOUT_MARGIN_PCT 50u
 
-/* ВРЕМЕННО: 0 — на датчик тока не смотрим, ход только по времени.
- * Вернуть 1, когда вход проверен на стенде. */
-#define AXIS_USE_ISENSE 0u
+/* 0 — на датчик тока не смотрим, ход только по времени. Рабочая версия
+ * без датчика лежит в коммите 917bca7. */
+#define AXIS_USE_ISENSE 1u
 
 #define AXIS_BOOT_HOME 1u
 
