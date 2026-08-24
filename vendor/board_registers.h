@@ -8,13 +8,13 @@
 
 #include <stdint.h>
 
-#define PROTOCOL_VERSION 4u
+#define PROTOCOL_VERSION 5u
 #define BOARD_ID 1u
 #define BOARD_NAME "payload-board-1"
 
 /* Отдаётся в регистре layout_crc. Мастер сверяет со своим значением и
  * отказывается работать при несовпадении. */
-#define LAYOUT_CRC 0xBE15u
+#define LAYOUT_CRC 0xBDE8u
 
 #define MODBUS_SLAVE_ADDRESS 1u
 #define MODBUS_BAUD 115200u
@@ -121,7 +121,7 @@ typedef enum {
 #define COMMAND_BLOCK_START 0x0000u
 #define COMMAND_BLOCK_COUNT 4u
 
-
+/* Статические параметры осей. */
 typedef struct {
     uint8_t  index;
     uint16_t stroke_mm;
@@ -136,12 +136,13 @@ typedef struct {
 
 static const axis_spec_t AXIS_SPECS[AXIS_COUNT] = {
     { .index = 0, .stroke_mm = 150, .step_mm = 1, .max_step = 150,
-      .speed_mm_s_x10 = 100, .has_encoder = 1, .step_travel_ms = 100 },  
+      .speed_mm_s_x10 = 40, .has_encoder = 1, .step_travel_ms = 250 },  /* shaft1 */
     { .index = 1, .stroke_mm = 100, .step_mm = 100, .max_step = 1,
-      .speed_mm_s_x10 = 100, .has_encoder = 0, .step_travel_ms = 10000 },  
+      .speed_mm_s_x10 = 40, .has_encoder = 0, .step_travel_ms = 25000 },  /* shaft2 */
 };
 
-
+/* Системы сброса ПС. Импульсом, не уровнем: катушка не должна остаться
+   под током. Номер устройства приходит в cmd_arg0, длительность в cmd_arg1. */
 typedef struct {
     uint8_t  index;
     uint8_t  deployed_bit;
@@ -152,8 +153,8 @@ typedef struct {
 #define RELEASE_COUNT 2u
 
 static const release_spec_t RELEASE_SPECS[RELEASE_COUNT] = {
-    { .index = 0, .deployed_bit = 0, .pulse_ms = 500, .pulse_ms_max = 2000 },  
-    { .index = 1, .deployed_bit = 1, .pulse_ms = 500, .pulse_ms_max = 2000 },  
+    { .index = 0, .deployed_bit = 0, .pulse_ms = 500, .pulse_ms_max = 2000 },  /* release1 */
+    { .index = 1, .deployed_bit = 1, .pulse_ms = 500, .pulse_ms_max = 2000 },  /* release2 */
 };
 
 #endif /* BOARD_REGISTERS_H */

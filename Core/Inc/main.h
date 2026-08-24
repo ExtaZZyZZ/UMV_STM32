@@ -49,8 +49,6 @@ extern "C" {
 
 /* USER CODE END EM */
 
-void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
-
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
@@ -59,6 +57,14 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define AXIS0_RPWM_Pin GPIO_PIN_0
+#define AXIS0_RPWM_GPIO_Port GPIOC
+#define AXIS0_LPWM_Pin GPIO_PIN_1
+#define AXIS0_LPWM_GPIO_Port GPIOC
+#define AXIS1_RPWM_Pin GPIO_PIN_2
+#define AXIS1_RPWM_GPIO_Port GPIOC
+#define AXIS1_LPWM_Pin GPIO_PIN_3
+#define AXIS1_LPWM_GPIO_Port GPIOC
 #define AXIS1_EN_Pin GPIO_PIN_2
 #define AXIS1_EN_GPIO_Port GPIOF
 #define UNDERWATER_Pin GPIO_PIN_0
