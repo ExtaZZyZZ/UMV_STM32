@@ -12,10 +12,11 @@
 
 void outputs_init(void);
 
-/* 50 Гц. Чаще незачем: 20 мс задержки на включение лампы незаметны. */
+
 void outputs_step(void);
 
-/* Текущая маска, поданная на ноги. Для тестов и диагностики. */
+
 uint16_t outputs_actual(void);
+uint8_t outputs_sgu_pulse_active(void);
 
 #endif /* APP_OUTPUTS_H */

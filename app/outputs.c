@@ -10,6 +10,8 @@
 
 
 #define OUT_MASK_ALL ((uint16_t)((1u << OUT_BIT_COUNT) - 1u))
+#define SGU_PULSE_MS 300u
+#define SGU_GAP_MS   300u
 
 typedef struct {
     GPIO_TypeDef *port;         
@@ -17,6 +19,11 @@ typedef struct {
     uint8_t       active_high;  /* 1 — единица включает нагрузку */
 } out_pin_t;
 
+static struct {
+    uint8_t  state;
+    uint8_t  pulse_active;
+    uint32_t marked_ms;
+} sgu;
 
 static const out_pin_t OUT_PINS[] = {
     [OUT_SPOTLIGHT]  = { SPOTLIGHT_GPIO_Port,  SPOTLIGHT_Pin,  1u },
@@ -44,25 +51,51 @@ void outputs_init(void)
     for (unsigned i = 0; i < OUT_BIT_COUNT; i++) {
         output_pin_set(&OUT_PINS[i], 0u);
     }
+    sgu.state        = 0u;
+    sgu.pulse_active = 0u;
+    sgu.marked_ms    = 0u;
 }
 
 void outputs_step(void)
 {
     const uint16_t mask = regfile_get_holding(HREG_OUTPUTS) & OUT_MASK_ALL;
+    const uint32_t now  = HAL_GetTick();
+    const uint8_t  want = (uint8_t)((mask >> OUT_SGU_LIGHT) & 1u);
 
     for (unsigned i = 0; i < OUT_BIT_COUNT; i++) {
+        if (i == (unsigned)OUT_SGU_LIGHT) {
+            continue;
+        }
         output_pin_set(&OUT_PINS[i], (mask >> i) & 1u);
     }
 
-    actual_mask = mask;
+    if (sgu.pulse_active) {
+        if ((now - sgu.marked_ms) >= SGU_PULSE_MS) {
+            output_pin_set(&OUT_PINS[OUT_SGU_LIGHT], 0u);
+            sgu.pulse_active = 0u;
+            sgu.marked_ms    = now;
+        }
+    } else if (want != sgu.state && (now - sgu.marked_ms) >= SGU_GAP_MS) {
+        output_pin_set(&OUT_PINS[OUT_SGU_LIGHT], 1u);
+        sgu.pulse_active = 1u;
+        sgu.marked_ms    = now;
+        sgu.state        = want;
+    }
 
+    actual_mask = (uint16_t)((mask & ~(1u << OUT_SGU_LIGHT)) |
+                             ((uint16_t)sgu.state << OUT_SGU_LIGHT));
 
-    regfile_set_input(IREG_DO_ACTUAL, mask);
+    regfile_set_input(IREG_DO_ACTUAL, actual_mask);
 }
+
 
 uint16_t outputs_actual(void)
 {
     return actual_mask;
 }
 
+uint8_t outputs_sgu_pulse_active(void)
+{
+    return sgu.pulse_active;
+}
 
