@@ -1,6 +1,6 @@
 {
   "_comment": "СГЕНЕРИРОВАНО protocol/generate.py — не редактировать. Вендорится в репозиторий прошивки; обе реализации CRC16 и кодирования ADU проверяются против этих значений.",
-  "protocol_version": 5,
+  "protocol_version": 6,
   "slave_address": 1,
   "crc_algorithm": {
     "name": "Modbus CRC-16",

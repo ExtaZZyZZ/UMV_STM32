@@ -8,13 +8,13 @@
 
 #include <stdint.h>
 
-#define PROTOCOL_VERSION 5u
+#define PROTOCOL_VERSION 6u
 #define BOARD_ID 1u
 #define BOARD_NAME "payload-board-1"
 
 /* Отдаётся в регистре layout_crc. Мастер сверяет со своим значением и
  * отказывается работать при несовпадении. */
-#define LAYOUT_CRC 0xBDE8u
+#define LAYOUT_CRC 0x63D8u
 
 #define MODBUS_SLAVE_ADDRESS 1u
 #define MODBUS_BAUD 115200u
@@ -38,6 +38,8 @@ typedef enum {
 typedef enum {
     IN_RELEASE1_DEPLOYED = 0,  /* Концевик системы сброса ПС №1 */
     IN_RELEASE2_DEPLOYED = 1,  /* Концевик системы сброса ПС №2 */
+    IN_RELEASE1_LOCK_OPEN = 2,  /* Концевик замка ПС №1 */
+    IN_RELEASE2_LOCK_OPEN = 3,  /* Концевик замка ПС №2 */
 } in_t;
 
 typedef enum {
@@ -113,7 +115,7 @@ typedef enum {
 } status_flag_t;
 
 #define OUT_BIT_COUNT 4u
-#define IN_BIT_COUNT 2u
+#define IN_BIT_COUNT 4u
 #define HREG_COUNT 5u
 #define IREG_COUNT 22u
 
@@ -141,11 +143,11 @@ static const axis_spec_t AXIS_SPECS[AXIS_COUNT] = {
       .speed_mm_s_x10 = 40, .has_encoder = 0, .step_travel_ms = 25000 },  /* shaft2 */
 };
 
-/* Системы сброса ПС. Импульсом, не уровнем: катушка не должна остаться
-   под током. Номер устройства приходит в cmd_arg0, длительность в cmd_arg1. */
+
 typedef struct {
     uint8_t  index;
     uint8_t  deployed_bit;
+    uint8_t  lock_open_bit;
     uint16_t pulse_ms;
     uint16_t pulse_ms_max;
 } release_spec_t;
@@ -153,8 +155,10 @@ typedef struct {
 #define RELEASE_COUNT 2u
 
 static const release_spec_t RELEASE_SPECS[RELEASE_COUNT] = {
-    { .index = 0, .deployed_bit = 0, .pulse_ms = 500, .pulse_ms_max = 2000 },  /* release1 */
-    { .index = 1, .deployed_bit = 1, .pulse_ms = 500, .pulse_ms_max = 2000 },  /* release2 */
+    { .index = 0, .deployed_bit = 0, .lock_open_bit = 2,
+      .pulse_ms = 500, .pulse_ms_max = 2000 },  /* release1 */
+    { .index = 1, .deployed_bit = 1, .lock_open_bit = 3,
+      .pulse_ms = 500, .pulse_ms_max = 2000 },  /* release2 */
 };
 
 #endif /* BOARD_REGISTERS_H */

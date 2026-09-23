@@ -6,7 +6,7 @@
  */
 
 #include "selftest.h"
-
+#include "axis_odom.h"
 #include "main.h"
 #include "crc16.h"
 #include "pdu.h"
@@ -55,8 +55,7 @@ static void st_udec(unsigned v)
     st_puts(&buf[i]);
 }
 
-/* sub — необязательный суффикс имени, чтобы три проверки одного кадра
- * не печатались тремя одинаковыми строками. */
+
 static void st_eq16s(const char *name, const char *sub, uint16_t got, uint16_t want)
 {
     if (got == want) {
@@ -337,15 +336,6 @@ static uint16_t make_req(uint8_t *buf, uint8_t fc, uint16_t start, uint16_t qty)
     return adu_wrap(buf, 6u);
 }
 
-/* Эталонный ответ на read_state_request сразу после regfile_init.
- * Не перечисленные элементы — нули, за это отвечает инициализация массива. */
-static const uint8_t EXPECT_READ_STATE[49] = {
-    [0]  = 0x01, [1]  = 0x04, [2]  = 0x2C,   /* адрес, функция, 44 байта данных */
-    [40] = 0x03,                             /* регистр 18: proto_ver  = 3      */
-    [41] = 0xF7, [42] = 0xC9,                /* регистр 19: layout_crc = 0xF7C9 */
-    [47] = 0x70, [48] = 0x89,                /* CRC 0x8970, младшим байтом вперёд */
-};
-
 static void run_slave_cases(void)
 {
     uint16_t len;
@@ -368,8 +358,16 @@ static void run_slave_cases(void)
     fake_ms += 1u;
     modbus_handler_task(&test_slave);
     st_eq16("slave:gap2_replies", cap_len, 49u);
+    /* Эталон собираем из карты: зашитые байты молча протухали на каждой
+     * смене layout_crc. Не перечисленное — нули. */
+    uint8_t expect[3u + IREG_COUNT * 2u + 2u] = { SELFTEST_SLAVE_ID, 0x04u,
+                                                  (uint8_t)(IREG_COUNT * 2u) };
+    wr_u16be(&expect[3u + IREG_PROTO_VER  * 2u], (uint16_t)PROTOCOL_VERSION);
+    wr_u16be(&expect[3u + IREG_LAYOUT_CRC * 2u], (uint16_t)LAYOUT_CRC);
+    (void)adu_wrap(expect, 3u + IREG_COUNT * 2u);
+
     st_eq16("slave:reply_bytes",
-            (uint16_t)(memcmp(cap_buf, EXPECT_READ_STATE, sizeof(EXPECT_READ_STATE)) == 0), 1u);
+            (uint16_t)(memcmp(cap_buf, expect, sizeof(expect)) == 0), 1u);
 
     /* Валидная транзакция — доказательство, что мастер жив. */
     st_eq16("slave:link_alive", (uint16_t)(test_slave.last_valid_ms == fake_ms), 1u);
@@ -614,6 +612,48 @@ static void run_outputs_cases(void)
     regfile_init();
     outputs_init();
 }
+static void run_axis_cases(void)
+{
+    for (unsigned i = 0; i < AXIS_COUNT; i++) {
+        const char    *sub      = (i == 0u) ? ":0" : ":1";
+        const uint16_t step_mm  = AXIS_SPECS[i].step_mm;
+        const uint16_t max_step = AXIS_SPECS[i].max_step;
+        const uint32_t travel   = AXIS_SPECS[i].step_travel_ms;
+        const int32_t  max_x10  = odom_step_to_x10(max_step, step_mm);
+        const int32_t  d        = (int32_t)step_mm * 10;
+        const uint32_t full_ms  = (uint32_t)max_step * travel;
+
+        /* Ступени и ход описывают одно и то же расстояние. */
+        st_eq16s("axis:stroke", sub, (uint16_t)(max_x10 / 10),
+                 AXIS_SPECS[i].stroke_mm);
+
+        /* Паспортная скорость и время ступени не разошлись. Проверка без
+         * деления: step_travel_ms × speed_x10 == step_mm × 10000. */
+        st_eq16s("axis:speed", sub,
+                 (uint16_t)((travel * AXIS_SPECS[i].speed_mm_s_x10) / 100u),
+                 (uint16_t)((uint32_t)step_mm * 100u));
+
+        /* Ступень → положение → ступень. */
+        st_eq16s("axis:step_zero", sub, odom_x10_to_step(0, step_mm), 0u);
+        st_eq16s("axis:step_max",  sub, odom_x10_to_step(max_x10, step_mm), max_step);
+
+        /* Округление к ближайшей, а не отбрасывание дроби. */
+        st_eq16s("axis:round_up", sub, odom_x10_to_step(3 * d + d / 2, step_mm), 4u);
+        st_eq16s("axis:round_dn", sub, odom_x10_to_step(3 * d + d / 2 - 1, step_mm), 3u);
+
+        /* Отрицательное положение — штатный результат на запасе хоминга. */
+        st_eq16s("axis:clamp_neg", sub, odom_x10_to_step(-d, step_mm), 0u);
+
+        /* Полный ход: время → путь и обратно. Десятки миллисекунд, чтобы
+         * длинный ход оси 1 не вылез за uint16 печати. */
+        st_eq16s("axis:full_path", sub,
+                 (uint16_t)odom_x10_from_ms(full_ms, travel, step_mm),
+                 (uint16_t)max_x10);
+        st_eq16s("axis:full_time", sub,
+                 (uint16_t)(odom_ms_from_x10(max_x10, travel, step_mm) / 10u),
+                 (uint16_t)(full_ms / 10u));
+    }
+}
 
 unsigned selftest_run(void)
 {
@@ -629,7 +669,7 @@ unsigned selftest_run(void)
     run_slave_cases();
     run_command_cases();
     run_outputs_cases();
-
+    run_axis_cases();
     st_puts("selftest: ");
     st_udec(st_passed);
     st_puts(" passed, ");

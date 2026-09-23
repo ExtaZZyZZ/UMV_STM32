@@ -16,7 +16,7 @@
 typedef struct {
     GPIO_TypeDef *port;         
     uint16_t      pin;
-    uint8_t       active_high;  /* 1 — единица включает нагрузку */
+    uint8_t       active_high;
 } out_pin_t;
 
 static struct {

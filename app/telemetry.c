@@ -6,18 +6,10 @@
 
 #include "main.h"
 #include "board_registers.h"
+#include "inputs.h"
 #include "regfile.h"
 #include "uart_link.h"
-#define DEPLOYED_ACTIVE_LOW 1u
-
-static const struct {
-    GPIO_TypeDef *port;
-    uint16_t      pin;
-} DEPLOYED_PINS[] = {
-    [0] = { RELEASE1_DEPLOYED_GPIO_Port, RELEASE1_DEPLOYED_Pin },
-    [1] = { RELEASE2_DEPLOYED_GPIO_Port, RELEASE2_DEPLOYED_Pin },
-};
-
+#include "encoder.h"
 
 void telemetry_step(void)
 {
@@ -36,17 +28,10 @@ void telemetry_step(void)
     if (s->link_ever_valid && (now - s->last_valid_ms) < LINK_TIMEOUT_MS) {
         flags |= (uint16_t)(1u << STATUS_FLAG_LINK_OK);
     }
-    uint16_t di = 0u;
-
-    for (unsigned i = 0; i < RELEASE_COUNT; i++) {
-        const uint8_t high = (HAL_GPIO_ReadPin(DEPLOYED_PINS[i].port,
-                                               DEPLOYED_PINS[i].pin) == GPIO_PIN_SET);
-        const uint8_t deployed = DEPLOYED_ACTIVE_LOW ? (uint8_t)!high : high;
-        if (deployed) {
-            di |= (uint16_t)(1u << RELEASE_SPECS[i].deployed_bit);
-        }
+    regfile_set_input(IREG_ENC_ERR, encoder_err_count());
+    if(encoder_is_up()) {
+        flags |= (uint16_t)(1u << STATUS_FLAG_ENCODER_OK);
     }
-
-    regfile_set_input(IREG_DI_BITS, di);
+    regfile_set_input(IREG_DI_BITS, inputs_bits());
     regfile_set_input(IREG_FLAGS, flags);
 }

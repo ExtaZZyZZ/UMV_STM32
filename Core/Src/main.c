@@ -25,6 +25,7 @@
 #include "regfile.h"
 #include "uart_link.h"
 #include "command.h"
+#include "inputs.h"
 #include "outputs.h"
 #include "axis.h"
 #include "sched.h"
@@ -47,6 +48,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
@@ -56,6 +58,7 @@ UART_HandleTypeDef huart1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -95,6 +98,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   HAL_Delay(200);                     /* дать терминалу подхватить линию */
   st_puts("USV board1 boot\r\n");
@@ -102,7 +106,9 @@ int main(void)
   regfile_init();
   (void)selftest_run();
   uart_link_init();
+  enc_link_init();
   command_init();
+  inputs_init();
   outputs_init();
   sched_init();
   /* USER CODE END 2 */
@@ -213,6 +219,54 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 9600;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart2.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_RS485Ex_Init(&huart2, UART_DE_POLARITY_HIGH, 0, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&huart2, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&huart2, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -227,9 +281,10 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, AXIS0_RPWM_Pin|AXIS0_LPWM_Pin|AXIS1_RPWM_Pin|AXIS1_LPWM_Pin, GPIO_PIN_RESET);
@@ -240,6 +295,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, UNDERWATER_Pin|SPOTLIGHT_Pin|LIGHTBAR_Pin|SGU_LIGHT_Pin
                           |LOCK1_Pin|LOCK2_Pin|AXIS0_EN_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(TURN_ON_SONAR_GPIO_Port, TURN_ON_SONAR_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : AXIS0_RPWM_Pin AXIS0_LPWM_Pin AXIS1_RPWM_Pin AXIS1_LPWM_Pin */
   GPIO_InitStruct.Pin = AXIS0_RPWM_Pin|AXIS0_LPWM_Pin|AXIS1_RPWM_Pin|AXIS1_LPWM_Pin;
@@ -264,22 +322,35 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : RELEASE1_DEPLOYED_Pin RELEASE2_DEPLOYED_Pin */
-  GPIO_InitStruct.Pin = RELEASE1_DEPLOYED_Pin|RELEASE2_DEPLOYED_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  /*Configure GPIO pin : TURN_ON_SONAR_Pin */
+  GPIO_InitStruct.Pin = TURN_ON_SONAR_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(TURN_ON_SONAR_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : RELEASE2_DEPLOYED_Pin LOCK1_OPEN_Pin LOCK2_OPEN_Pin */
+  GPIO_InitStruct.Pin = RELEASE2_DEPLOYED_Pin|LOCK1_OPEN_Pin|LOCK2_OPEN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : RELEASE1_DEPLOYED_Pin */
+  GPIO_InitStruct.Pin = RELEASE1_DEPLOYED_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(RELEASE1_DEPLOYED_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : ISENSE_L_Pin */
   GPIO_InitStruct.Pin = ISENSE_L_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(ISENSE_L_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : ISENSE_R_Pin */
   GPIO_InitStruct.Pin = ISENSE_R_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(ISENSE_R_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
