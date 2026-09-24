@@ -8,6 +8,7 @@
 #ifndef ENCODER_H_
 #define ENCODER_H_
 #include <stdint.h>
+#define ENC_COUNTS_PER_TURN 1024
 
 void encoder_init(void (*transmit)(const uint8_t *, uint16_t),
                   uint32_t (*now_ms)(void));

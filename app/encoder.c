@@ -7,12 +7,15 @@
 
 #include "encoder.h"
 #include "pdu.h"
+
+#include <stddef.h>
 #define ENC_ADDR        1u
 #define ENC_FC          0x03u
 #define ENC_REPLY_LEN   7u
 #define ENC_TIMEOUT_MS 50u
 #define ENC_GAP_MS      4u
 #define ENC_LOST_MS   200u
+
 
 typedef enum {ENC_SEND = 0, ENC_RX, ENC_GAP } enc_state_t;
 
@@ -32,8 +35,7 @@ static uint16_t    err_count;
 
 static void enc_accept(void)
 {
-	uint16_t pdu_len = 0u;
-	if(adu_check(rx, ENC_REPLY_LEN, ENC_ADDR, &pdu_len) != ADU_OK
+	if(adu_check(rx, ENC_REPLY_LEN, ENC_ADDR, NULL) != ADU_OK
 			|| rx[1] != ENC_FC || rx[2] != 2u) {
 		err_count++;
 		return;

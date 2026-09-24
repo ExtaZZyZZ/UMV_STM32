@@ -3,14 +3,32 @@
 #define APP_AXIS_ODOM_H
 
 #include <stdint.h>
-
+#include "encoder.h"
 
 static inline int32_t odom_step_to_x10(uint16_t step, uint16_t step_mm)
 {
     return (int32_t)((uint32_t)step * step_mm * 10u);
 }
 
+static inline int32_t odom_turn_diff(int32_t a, int32_t b)
+{
+	int32_t d = (b - a) % ENC_COUNTS_PER_TURN;
+	if (d > ENC_COUNTS_PER_TURN / 2) d -= ENC_COUNTS_PER_TURN;
+	if (d < -ENC_COUNTS_PER_TURN / 2) d += ENC_COUNTS_PER_TURN;
+	return d;
+}
 
+static inline int32_t odom_x10_from_counts(int32_t counts, int32_t low, int32_t high, int32_t max_x10)
+{
+	const int32_t span = odom_turn_diff(low, high);
+	if (span == 0) {
+		return 0;
+	}
+	int32_t x10 = (odom_turn_diff(low, counts) * max_x10) / span;
+	if (x10 < 0) x10 = 0;
+	if (x10 > max_x10) x10 = max_x10;
+	return x10;
+}
 static inline uint16_t odom_x10_to_step(int32_t x10, uint16_t step_mm)
 {
     const int32_t d = (int32_t)step_mm * 10;
