@@ -20,11 +20,18 @@
 #define ENC_COUNTS_HIGH 132
 #define AXIS_STALL_COUNTS 2
 #define AXIS_STALL_MS 2000u
+#define CALIB_MIN_SPAN 20
 
 _Static_assert(SONAR_MAST_AXIS < AXIS_COUNT, "SONAR_MAST_AXIS out of range");
+static int32_t calib_first_val = ENC_COUNTS_LOW;
+static int32_t calib_second_val = ENC_COUNTS_HIGH;
+static int32_t calib_temp_val = 0;
 
+typedef enum { CALIB_OFF, CALIB_EXTEND, CALIB_RETRACT} calib_t;
 typedef enum { DIR_NONE = 0, DIR_EXTEND, DIR_RETRACT } dir_t;
 typedef enum { REF_NONE = 0, REF_LOW, REF_HIGH } ref_t;
+static calib_t step_calib = CALIB_OFF;
+
 typedef struct {
     GPIO_TypeDef *en_port;   uint16_t en_pin;
     GPIO_TypeDef *ext_port;  uint16_t ext_pin;   /* RPWM */
@@ -57,7 +64,9 @@ typedef struct {
 	uint32_t stall_since;
 } axis_t;
 
-
+static uint16_t motion_start(unsigned i, dir_t dir, uint16_t target,
+                             uint32_t travel_ms, uint8_t state, ref_t endstop);
+static void motion_fault(unsigned i, uint8_t fault);
 static axis_t  ax[AXIS_COUNT];
 static uint8_t boot_pending = 1u;
 
@@ -152,7 +161,27 @@ static void motion_done(unsigned i)
     ax[i].known     = 1u;
     ax[i].state     = AXIS_STATE_IDLE;
     ax[i].boot_home = 0u;
+    if(AXIS_SPECS[i].has_encoder) {
+        if (step_calib == CALIB_RETRACT) {
+            calib_temp_val = encoder_counts();
+            step_calib = CALIB_EXTEND;
+            motion_start(i, DIR_EXTEND, AXIS_SPECS[i].max_step, 0u, AXIS_STATE_MOVING, REF_HIGH);
+            return;
+        }
+        else if (step_calib == CALIB_EXTEND) {
+            step_calib = CALIB_OFF;
+            const int32_t high = encoder_counts();                    
+            const int32_t span = odom_turn_diff(calib_temp_val, high);
+            if ((span < CALIB_MIN_SPAN) && (-span < CALIB_MIN_SPAN)) {
+                motion_fault(i, AXIS_FAULT_STALL);
+                return;
+            }
+            calib_first_val = calib_temp_val;
+            calib_second_val = high;
+        }
+}
     axis_publish(i);
+    
 }
 
 static void motion_abort(unsigned i)
@@ -167,7 +196,8 @@ static void motion_abort(unsigned i)
         ax[i].ref     = REF_NONE;
         ax[i].endstop = REF_NONE;
     }
-
+    step_calib = CALIB_OFF;
+    
     ax[i].dir       = DIR_NONE;
     ax[i].boot_home = 0u;
     axis_publish(i);
@@ -183,6 +213,7 @@ static void motion_fault(unsigned i, uint8_t fault)
     ax[i].state     = AXIS_STATE_FAULT;
     ax[i].fault     = fault;
     ax[i].boot_home = 0u;
+    step_calib = CALIB_OFF;
     axis_publish(i);
 }
 
@@ -251,7 +282,7 @@ void axis_step(void)
 {
 	for (unsigned i = 0; i < AXIS_COUNT; i++) {
 		if (AXIS_SPECS[i].has_encoder && encoder_is_up()) {
-			ax[i].pos_x10 = odom_x10_from_counts(encoder_counts(), ENC_COUNTS_LOW, ENC_COUNTS_HIGH, axis_max_x10(i));
+			ax[i].pos_x10 = odom_x10_from_counts(encoder_counts(), calib_first_val, calib_second_val, axis_max_x10(i));
 			ax[i].known = 1u;
 		
         if (ax[i].state == AXIS_STATE_UNKNOWN) {
@@ -412,4 +443,21 @@ uint16_t axis_cmd_home(uint16_t i)
 
     ax[i].fault = AXIS_FAULT_NONE;
     return motion_start(i, DIR_RETRACT, 0u, travel, AXIS_STATE_HOMING, REF_LOW);
+}
+
+uint16_t axis_cmd_calibrate(uint16_t i)
+{
+    if (!AXIS_SPECS[i].has_encoder) {
+        return ACK_RESULT_BAD_ARG;
+    }
+    if (axis_busy(i)) {
+        return ACK_RESULT_REFUSED_BUSY;
+    }
+    if (!encoder_is_up()) {
+        return ACK_RESULT_REFUSED_SAFETY;
+    }
+
+    ax[i].fault = AXIS_FAULT_NONE;
+    step_calib  = CALIB_RETRACT;
+    return motion_start(i, DIR_RETRACT, 0u, 0u, AXIS_STATE_HOMING, REF_LOW);
 }

@@ -70,7 +70,7 @@ static uint16_t do_axis(uint16_t code, uint16_t axis, uint16_t step)
     switch (code) {
         case CMD_CODE_AXIS_GOTO: return axis_cmd_goto(axis, step);
         case CMD_CODE_AXIS_STOP: return axis_cmd_stop(axis);
-        default:                 return axis_cmd_home(axis);
+        default:                 return step == 1 ? axis_cmd_calibrate(axis) :axis_cmd_home(axis);
     }
 }
 

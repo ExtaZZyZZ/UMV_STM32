@@ -22,4 +22,8 @@ uint16_t axis_cmd_goto(uint16_t axis, uint16_t step);
 uint16_t axis_cmd_stop(uint16_t axis);
 uint16_t axis_cmd_home(uint16_t axis);
 
+/* Прогон по упорам: вниз, вверх, снять показания энкодера в обоих. Только ось
+ * с энкодером; результат — IDLE или FAULT по окончании, не в ответе на команду. */
+uint16_t axis_cmd_calibrate(uint16_t axis);
+
 #endif /* APP_AXIS_H */
