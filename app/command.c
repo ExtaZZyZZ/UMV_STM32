@@ -61,8 +61,6 @@ static uint16_t do_axis(uint16_t code, uint16_t axis, uint16_t step)
         return ACK_RESULT_BAD_ARG;
     }
 
-    /* STOP пропускаем всегда: отказать в остановке хуже, чем исполнить её
-     * на подозрительной линии. */
     if (code != CMD_CODE_AXIS_STOP && !uart_link_is_up()) {
         return ACK_RESULT_REFUSED_LINK_LOST;
     }

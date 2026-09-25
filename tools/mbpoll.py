@@ -12,6 +12,8 @@
     python tools/mbpoll.py axis 1 home         хоминг оси 1 с замером времени
     python tools/mbpoll.py axis 0 goto 75      ось 0 на ступень 75
     python tools/mbpoll.py axis 0 stop         аварийный останов оси
+    python tools/mbpoll.py axis 0 calibrate    прогон по упорам, замер энкодера
+    python tools/mbpoll.py jitter 10           дрожание энкодера за 10 с, вал неподвижен
     python tools/mbpoll.py --port COM9 ...     другой порт
 
 Параметры линии берутся из протокола: 115200 8E1, адрес слейва 1.
@@ -338,6 +340,70 @@ def watch(port: str) -> None:
             time.sleep(0.05)
 
 
+def jitter(port: str, seconds: float) -> int:
+    """Дрожание энкодера оси 0 на неподвижном валу.
+
+    Сырых отсчётов в телеметрии нет, поэтому меряем по положению: один отсчёт
+    энкодера — это наименьший шаг между встреченными значениями. Детект
+    застревания сбрасывает таймер, когда показание отошло от опоры на
+    AXIS_STALL_COUNTS, поэтому порог должен быть больше размаха дрожания.
+    """
+    seen: dict[int, int] = {}
+    polls = errors = 0
+    enc_err_first = enc_err_last = None
+    deadline = time.monotonic() + seconds
+
+    print(f"Замер {seconds:.0f} с, 20 Гц. Вал не трогать.\n")
+    with serial.Serial(port, BAUD, bytesize=8, parity=serial.PARITY_EVEN,
+                       stopbits=1, timeout=0.2) as link:
+        while time.monotonic() < deadline:
+            regs = _poll_regs(link)
+            polls += 1
+            if regs is None:
+                errors += 1
+            else:
+                pos = _signed(regs[AXIS_BLOCK_START + 2])
+                seen[pos] = seen.get(pos, 0) + 1
+                enc_err_last = regs[17]
+                if enc_err_first is None:
+                    enc_err_first = regs[17]
+            print(f"\r   опросов {polls}, разных значений {len(seen)}",
+                  end="", flush=True)
+            time.sleep(0.05)
+    print("\n")
+
+    if not seen:
+        print("Плата не ответила ни разу.")
+        return 1
+
+    values = sorted(seen)
+    print("   положение, мм x10   сколько раз")
+    for v in values:
+        print(f"   {v:>17d}   {seen[v]}")
+
+    if values[0] == 0 or values[-1] == 1500:
+        print("\nВал за краем калибровки: положение прижато к 0 или 1500, дрожание")
+        print("в нём не видно. Поставьте вал в середину хода и повторите.")
+        return 2
+
+    if len(values) == 1:
+        spread = 0
+        print("\nДрожания нет: все опросы дали одно значение.")
+    else:
+        unit = min(b - a for a, b in zip(values, values[1:]))
+        spread = round((values[-1] - values[0]) / unit)
+        print(f"\nОдин отсчёт энкодера - около {unit / 10:.1f} мм. "
+              f"Размах дрожания — {spread} отсч.")
+
+    if enc_err_first is not None and enc_err_last != enc_err_first:
+        print(f"enc_err вырос на {enc_err_last - enc_err_first} — связь с энкодером сбоила.")
+
+    need = spread + 1
+    verdict = "хватает" if need <= 2 else "НЕ хватает"
+    print(f"Нужен порог AXIS_STALL_COUNTS не меньше {need}; нынешних 2 — {verdict}.")
+    return 0
+
+
 def _number(text: str, what: str) -> int | None:
     try:
         return int(text, 0)
@@ -377,6 +443,7 @@ def cmd_axis(args: argparse.Namespace) -> int:
         print("  python tools/mbpoll.py axis 1 home")
         print("  python tools/mbpoll.py axis 0 goto 75")
         print("  python tools/mbpoll.py axis 0 stop")
+        print("  python tools/mbpoll.py axis 0 calibrate")
         return 2
 
     index = _number(args.params[0], "Номер оси")
@@ -390,6 +457,10 @@ def cmd_axis(args: argparse.Namespace) -> int:
     if action == "home":
         return send_command(args.port, CMD_AXIS_HOME, index, 0, args.twice,
                             follow=index)
+    if action == "calibrate":
+        # Пока без отдельного кода в карте: HOME со вторым аргументом 1.
+        return send_command(args.port, CMD_AXIS_HOME, index, 1, args.twice,
+                            follow=index)
     if action == "stop":
         return send_command(args.port, CMD_AXIS_STOP, index, 0, args.twice)
     if action == "goto":
@@ -402,7 +473,7 @@ def cmd_axis(args: argparse.Namespace) -> int:
         return send_command(args.port, CMD_AXIS_GOTO, index, step, args.twice,
                             follow=index)
 
-    print(f"Неизвестное действие {action!r}: бывают home, goto и stop.")
+    print(f"Неизвестное действие {action!r}: бывают home, goto, stop и calibrate.")
     return 2
 
 
@@ -413,7 +484,7 @@ def main() -> int:
     )
     parser.add_argument("command", nargs="?", default="state",
                         choices=["state", "holding", "outputs", "watch",
-                                 "release", "buoy", "axis"])
+                                 "release", "buoy", "axis", "jitter"])
     parser.add_argument("params", nargs="*",
                         help="аргументы команды, примеры в описании выше")
     parser.add_argument("--port", default="COM8")
@@ -428,6 +499,12 @@ def main() -> int:
 
     if args.command == "axis":
         return cmd_axis(args)
+
+    if args.command == "jitter":
+        seconds = _number(args.params[0], "Длительность") if args.params else 10
+        if seconds is None:
+            return 2
+        return jitter(args.port, float(seconds))
 
     if args.command == "watch":
         try:

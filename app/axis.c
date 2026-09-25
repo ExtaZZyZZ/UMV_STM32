@@ -22,6 +22,16 @@
 #define AXIS_STALL_MS 2000u
 #define CALIB_MIN_SPAN 20
 
+#define CAL1     0x43414C31
+#define ADDRESS_FLASH 0x0807F800u
+
+typedef struct {
+    uint32_t mark;
+    int32_t lower_stop;
+    int32_t upper_stop;
+    uint32_t additional;
+} flash_calib_t;
+_Static_assert(sizeof(flash_calib_t) % 8 == 0, "The structure is not a multiple of 8.");
 _Static_assert(SONAR_MAST_AXIS < AXIS_COUNT, "SONAR_MAST_AXIS out of range");
 static int32_t calib_first_val = ENC_COUNTS_LOW;
 static int32_t calib_second_val = ENC_COUNTS_HIGH;
@@ -70,6 +80,50 @@ static void motion_fault(unsigned i, uint8_t fault);
 static axis_t  ax[AXIS_COUNT];
 static uint8_t boot_pending = 1u;
 
+static HAL_StatusTypeDef flash_write(int32_t low, int32_t high)
+{
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
+    HAL_FLASH_Unlock();
+    FLASH_EraseInitTypeDef flash;
+    flash.TypeErase = FLASH_TYPEERASE_PAGES;
+    flash.Banks = FLASH_BANK_2;
+    flash.Page = 127u;
+    flash.NbPages = 1u;
+    uint32_t page_error;
+    if(HAL_FLASHEx_Erase(&flash, &page_error) != HAL_OK) 
+    {
+        HAL_FLASH_Lock();
+        return HAL_ERROR;
+    }
+
+    uint64_t data = ((uint64_t)(uint32_t)low << 32) | (uint64_t)CAL1;
+    HAL_StatusTypeDef status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD,
+                                                 ADDRESS_FLASH, data);
+    if (status != HAL_OK) {
+        HAL_FLASH_Lock();
+        return status;
+    }
+
+    data   = (uint64_t)(uint32_t)high;
+    status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD,
+                               ADDRESS_FLASH + 8u, data);
+    if (status != HAL_OK) {
+        HAL_FLASH_Lock();
+        return status;
+    }
+    HAL_FLASH_Lock();
+    return status;
+
+}
+
+static uint8_t flash_read(void)
+{
+    const flash_calib_t* rec = (const flash_calib_t *)ADDRESS_FLASH;
+    if(rec->mark != CAL1) return 0u;
+    calib_first_val = rec->lower_stop;
+    calib_second_val = rec->upper_stop;
+    return 1u;
+}
 static void axis_apply(unsigned i, dir_t dir)
 {
     const axis_pins_t *p = &AXIS_PINS[i];
@@ -178,6 +232,7 @@ static void motion_done(unsigned i)
             }
             calib_first_val = calib_temp_val;
             calib_second_val = high;
+            flash_write(calib_first_val, calib_second_val);
         }
 }
     axis_publish(i);
@@ -196,7 +251,7 @@ static void motion_abort(unsigned i)
         ax[i].ref     = REF_NONE;
         ax[i].endstop = REF_NONE;
     }
-    step_calib = CALIB_OFF;
+    if(AXIS_SPECS[i].has_encoder) step_calib = CALIB_OFF;
     
     ax[i].dir       = DIR_NONE;
     ax[i].boot_home = 0u;
@@ -213,7 +268,7 @@ static void motion_fault(unsigned i, uint8_t fault)
     ax[i].state     = AXIS_STATE_FAULT;
     ax[i].fault     = fault;
     ax[i].boot_home = 0u;
-    step_calib = CALIB_OFF;
+    if(AXIS_SPECS[i].has_encoder) step_calib = CALIB_OFF;
     axis_publish(i);
 }
 
@@ -276,6 +331,8 @@ void axis_init(void)
         axis_apply(i, DIR_NONE);
         axis_publish(i);
     }
+    (void)flash_read();
+
 }
 
 void axis_step(void)
@@ -461,3 +518,4 @@ uint16_t axis_cmd_calibrate(uint16_t i)
     step_calib  = CALIB_RETRACT;
     return motion_start(i, DIR_RETRACT, 0u, 0u, AXIS_STATE_HOMING, REF_LOW);
 }
+

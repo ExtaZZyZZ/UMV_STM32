@@ -13,6 +13,8 @@
 
 void uart_link_init(void);
 
+void enc_link_init(void);
+
 void enc_receive_isr(void);
 
 void uart_receive_isr(void);
