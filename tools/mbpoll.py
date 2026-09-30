@@ -332,7 +332,8 @@ def watch(port: str) -> None:
                 uptime = (reg[14] << 16) | reg[13]
                 flags = reg[4]
                 link_ok = "LINK_OK" if flags & 1 else "-------"
-                print(f"\ruptime {uptime / 1000:8.1f} с   flags 0x{flags:04X} {link_ok}   "
+                wdt = "WDT_TRIPPED" if flags & 2 else "-----------"
+                print(f"\ruptime {uptime / 1000:8.1f} с   flags 0x{flags:04X} {link_ok} {wdt}   "
                       f"crc_err {reg[15]:<4d} frame_err {reg[16]:<4d} "
                       f"do_actual 0x{reg[2]:02X}   опросов {polls}, сбоев {errors}",
                       end="", flush=True)

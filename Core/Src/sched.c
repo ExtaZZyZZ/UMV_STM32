@@ -8,7 +8,7 @@
 #include "outputs.h"
 #include "axis.h"
 #include "encoder.h"
-
+#include "wdg.h"
 static uint32_t serviced;     
 static uint32_t max_lag;      
 static uint32_t late_ticks;   
@@ -30,6 +30,7 @@ static const sched_task_t TASKS[] = {
     { 20u,    0u, command_step       },  // исполнение команд, 50 Гц
     { 20u,    5u, outputs_step       },  // раскладка маски по ногам, 50 Гц
     { 20u,   10u, telemetry_step     },  // обновление телеметрии, 50 Гц
+    { 100u,  15u, wdg_step           },  // перезапуск вотчдога 10 Гц
 };
 
 #define TASK_COUNT (sizeof(TASKS) / sizeof(TASKS[0]))

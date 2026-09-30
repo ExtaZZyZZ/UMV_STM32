@@ -2,14 +2,14 @@
  * telemetry.c — заполнение входных регистров.
  */
 
-#include "telemetry.h"
-
+#include "wdg.h"
 #include "main.h"
 #include "board_registers.h"
 #include "inputs.h"
 #include "regfile.h"
 #include "uart_link.h"
 #include "encoder.h"
+#include "telemetry.h"
 
 void telemetry_step(void)
 {
@@ -31,6 +31,9 @@ void telemetry_step(void)
     regfile_set_input(IREG_ENC_ERR, encoder_err_count());
     if(encoder_is_up()) {
         flags |= (uint16_t)(1u << STATUS_FLAG_ENCODER_OK);
+    }
+    if(wdg_tripped()) {
+        flags |= (uint16_t)(1u << STATUS_FLAG_WDT_TRIPPED);
     }
     regfile_set_input(IREG_DI_BITS, inputs_bits());
     regfile_set_input(IREG_FLAGS, flags);
