@@ -8,13 +8,13 @@
 
 #include <stdint.h>
 
-#define PROTOCOL_VERSION 6u
+#define PROTOCOL_VERSION 7u
 #define BOARD_ID 1u
 #define BOARD_NAME "payload-board-1"
 
 /* Отдаётся в регистре layout_crc. Мастер сверяет со своим значением и
  * отказывается работать при несовпадении. */
-#define LAYOUT_CRC 0x63D8u
+#define LAYOUT_CRC 0x80EDu
 
 #define MODBUS_SLAVE_ADDRESS 1u
 #define MODBUS_BAUD 115200u
@@ -33,6 +33,8 @@ typedef enum {
     OUT_LIGHTBAR = 1,  /* Светодиодная балка */
     OUT_SGU_LIGHT = 2,  /* СГУ «КОЛУМБ» синий */
     OUT_UNDERWATER = 3,  /* Подводные огни */
+    OUT_FLASHER_YELLOW = 4,  /* Проблесковые желтые тарелки */
+    OUT_FLASHER_BLUE = 5,  /* Пробелсковые синие тарелки */
 } out_t;
 
 typedef enum {
@@ -114,7 +116,7 @@ typedef enum {
     STATUS_FLAG_ENCODER_OK = 2,
 } status_flag_t;
 
-#define OUT_BIT_COUNT 4u
+#define OUT_BIT_COUNT 6u
 #define IN_BIT_COUNT 4u
 #define HREG_COUNT 5u
 #define IREG_COUNT 22u
@@ -143,7 +145,8 @@ static const axis_spec_t AXIS_SPECS[AXIS_COUNT] = {
       .speed_mm_s_x10 = 40, .has_encoder = 0, .step_travel_ms = 25000 },  /* shaft2 */
 };
 
-
+/* Системы сброса ПС. Импульсом, не уровнем: катушка не должна остаться
+   под током. Номер устройства приходит в cmd_arg0, длительность в cmd_arg1. */
 typedef struct {
     uint8_t  index;
     uint8_t  deployed_bit;

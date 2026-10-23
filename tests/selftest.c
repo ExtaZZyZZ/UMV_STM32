@@ -83,6 +83,9 @@ static void st_eq16(const char *name, uint16_t got, uint16_t want)
     st_eq16s(name, 0, got, want);
 }
 
+/* Уровень на ноге по метке CubeMX: ST_PIN(FLASHER_BLUE). */
+#define ST_PIN(label) ((uint16_t)HAL_GPIO_ReadPin(label##_GPIO_Port, label##_Pin))
+
 /* -------------------------------------------------- вектора: crc_vectors */
 
 static const uint8_t V_ZERO[]  = { 0x00 };
@@ -575,6 +578,8 @@ static void run_command_cases(void)
 
 static void run_outputs_cases(void)
 {
+    const uint16_t yellow = (uint16_t)(1u << OUT_FLASHER_YELLOW);
+    const uint16_t blue   = (uint16_t)(1u << OUT_FLASHER_BLUE);
     uint16_t v;
 
     regfile_init();
@@ -584,6 +589,32 @@ static void run_outputs_cases(void)
     outputs_step();
     (void)regfile_read_input(IREG_DO_ACTUAL, &v);
     st_eq16("out:idle_off", v, 0u);
+
+    /* Маячки проверяем здесь, пока СГУ в покое: ниже по тесту он может
+     * остаться включённым, и do_actual уже не сравнить точно. Проверки
+     * «_alone» ловят перепутанные строки в OUT_PINS: do_actual собирается
+     * из маски и такую ошибку не видит. */
+    (void)regfile_write_holding(HREG_OUTPUTS, yellow);
+    outputs_step();
+    (void)regfile_read_input(IREG_DO_ACTUAL, &v);
+    st_eq16("out:flasher_yellow",       v, yellow);
+    st_eq16("out:flasher_yellow_pin",   ST_PIN(FLASHER_YELLOW), GPIO_PIN_SET);
+    st_eq16("out:flasher_yellow_alone", ST_PIN(FLASHER_BLUE),   GPIO_PIN_RESET);
+
+    (void)regfile_write_holding(HREG_OUTPUTS, blue);
+    outputs_step();
+    (void)regfile_read_input(IREG_DO_ACTUAL, &v);
+    st_eq16("out:flasher_blue",       v, blue);
+    st_eq16("out:flasher_blue_pin",   ST_PIN(FLASHER_BLUE),   GPIO_PIN_SET);
+    st_eq16("out:flasher_blue_alone", ST_PIN(FLASHER_YELLOW), GPIO_PIN_RESET);
+
+    /* Без мастера на линии маячки продолжают гореть. */
+    (void)regfile_write_holding(HREG_OUTPUTS, (uint16_t)(yellow | blue));
+    for (unsigned i = 0; i < 51u; i++) {
+        outputs_step();
+    }
+    (void)regfile_read_input(IREG_DO_ACTUAL, &v);
+    st_eq16("out:flashers_survive_link_loss", v, (uint16_t)(yellow | blue));
 
     /* Обычная маска: фары и балка. */
     (void)regfile_write_holding(HREG_OUTPUTS, 0x0003u);

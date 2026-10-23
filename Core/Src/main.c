@@ -324,7 +324,8 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, AXIS0_RPWM_Pin|AXIS0_LPWM_Pin|AXIS1_RPWM_Pin|AXIS1_LPWM_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, AXIS0_RPWM_Pin|AXIS0_LPWM_Pin|AXIS1_RPWM_Pin|AXIS1_LPWM_Pin
+                          |FLASHER_BLUE_Pin|FLASHER_YELLOW_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(AXIS1_EN_GPIO_Port, AXIS1_EN_Pin, GPIO_PIN_RESET);
@@ -336,8 +337,10 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(TURN_ON_SONAR_GPIO_Port, TURN_ON_SONAR_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : AXIS0_RPWM_Pin AXIS0_LPWM_Pin AXIS1_RPWM_Pin AXIS1_LPWM_Pin */
-  GPIO_InitStruct.Pin = AXIS0_RPWM_Pin|AXIS0_LPWM_Pin|AXIS1_RPWM_Pin|AXIS1_LPWM_Pin;
+  /*Configure GPIO pins : AXIS0_RPWM_Pin AXIS0_LPWM_Pin AXIS1_RPWM_Pin AXIS1_LPWM_Pin
+                           FLASHER_BLUE_Pin FLASHER_YELLOW_Pin */
+  GPIO_InitStruct.Pin = AXIS0_RPWM_Pin|AXIS0_LPWM_Pin|AXIS1_RPWM_Pin|AXIS1_LPWM_Pin
+                          |FLASHER_BLUE_Pin|FLASHER_YELLOW_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

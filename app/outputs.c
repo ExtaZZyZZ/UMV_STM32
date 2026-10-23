@@ -30,6 +30,8 @@ static const out_pin_t OUT_PINS[] = {
     [OUT_LIGHTBAR]   = { LIGHTBAR_GPIO_Port,   LIGHTBAR_Pin,   1u },
     [OUT_SGU_LIGHT]  = { SGU_LIGHT_GPIO_Port,  SGU_LIGHT_Pin,  1u },
     [OUT_UNDERWATER] = { UNDERWATER_GPIO_Port, UNDERWATER_Pin, 1u },
+    [OUT_FLASHER_BLUE] = {FLASHER_BLUE_GPIO_Port, FLASHER_BLUE_Pin, 1u},
+    [OUT_FLASHER_YELLOW] = {FLASHER_YELLOW_GPIO_Port, FLASHER_YELLOW_Pin, 1u},
 };
 
 _Static_assert(sizeof(OUT_PINS) / sizeof(OUT_PINS[0]) == OUT_BIT_COUNT,
