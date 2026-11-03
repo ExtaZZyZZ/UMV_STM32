@@ -30,6 +30,7 @@
 #include "axis.h"
 #include "sched.h"
 #include "wdg.h"
+#include "release.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -106,6 +107,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   HAL_Delay(200);                     /* дать терминалу подхватить линию */
   st_puts("USV board1 boot\r\n");
+  release_init();
   axis_init();
   regfile_init();
   (void)selftest_run();
@@ -335,7 +337,13 @@ static void MX_GPIO_Init(void)
                           |LOCK1_Pin|LOCK2_Pin|AXIS0_EN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(TURN_ON_SONAR_GPIO_Port, TURN_ON_SONAR_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, TURN_ON_SONAR_Pin|DIR_LOCK_DRIVER_1_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, EN_LOCK_DRIVER_2_Pin|EN_LOCK_DRIVER_1_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(DIR_LOCK_DRIVER_2_GPIO_Port, DIR_LOCK_DRIVER_2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : AXIS0_RPWM_Pin AXIS0_LPWM_Pin AXIS1_RPWM_Pin AXIS1_LPWM_Pin
                            FLASHER_BLUE_Pin FLASHER_YELLOW_Pin */
@@ -362,24 +370,38 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : TURN_ON_SONAR_Pin */
-  GPIO_InitStruct.Pin = TURN_ON_SONAR_Pin;
+  /*Configure GPIO pins : TURN_ON_SONAR_Pin DIR_LOCK_DRIVER_1_Pin */
+  GPIO_InitStruct.Pin = TURN_ON_SONAR_Pin|DIR_LOCK_DRIVER_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(TURN_ON_SONAR_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : RELEASE2_DEPLOYED_Pin LOCK1_OPEN_Pin LOCK2_OPEN_Pin */
-  GPIO_InitStruct.Pin = RELEASE2_DEPLOYED_Pin|LOCK1_OPEN_Pin|LOCK2_OPEN_Pin;
+  /*Configure GPIO pins : RELEASE2_DEPLOYED_Pin IS_BUOY_1_Pin */
+  GPIO_InitStruct.Pin = RELEASE2_DEPLOYED_Pin|IS_BUOY_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : RELEASE1_DEPLOYED_Pin */
-  GPIO_InitStruct.Pin = RELEASE1_DEPLOYED_Pin;
+  /*Configure GPIO pin : IS_BOUY_2_Pin */
+  GPIO_InitStruct.Pin = IS_BOUY_2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(RELEASE1_DEPLOYED_GPIO_Port, &GPIO_InitStruct);
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(IS_BOUY_2_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : EN_LOCK_DRIVER_2_Pin EN_LOCK_DRIVER_1_Pin */
+  GPIO_InitStruct.Pin = EN_LOCK_DRIVER_2_Pin|EN_LOCK_DRIVER_1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : DIR_LOCK_DRIVER_2_Pin */
+  GPIO_InitStruct.Pin = DIR_LOCK_DRIVER_2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(DIR_LOCK_DRIVER_2_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : ISENSE_L_Pin */
   GPIO_InitStruct.Pin = ISENSE_L_Pin;

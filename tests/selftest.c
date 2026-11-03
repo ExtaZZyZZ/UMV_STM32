@@ -439,7 +439,8 @@ static void run_slave_cases(void)
     st_eq16("slave:fc16/qty",      rd_u16be(&cap_buf[4]), 0x0004u);
     st_eq16("slave:fc16/cmd_seq",  regfile_get_holding(HREG_CMD_SEQ),  1u);
     st_eq16("slave:fc16/cmd_code", regfile_get_holding(HREG_CMD_CODE), 1u);
-    st_eq16("slave:fc16/cmd_arg0", regfile_get_holding(HREG_CMD_ARG0), 500u);
+    st_eq16("slave:fc16/cmd_arg0", regfile_get_holding(HREG_CMD_ARG0),   0u);
+    st_eq16("slave:fc16/cmd_arg1", regfile_get_holding(HREG_CMD_ARG1), 500u);
 
     /* Счётчик байт не сходится с количеством — запрос испорчен. */
     memcpy(st_scratch, F_RELEASE, sizeof(F_RELEASE));
@@ -483,32 +484,34 @@ static void run_command_cases(void)
     command_init();
     mb_slave_init(&test_slave, &FAKE_OPS, fake_now_ms, SELFTEST_SLAVE_ID);
 
-    /* Эталонный кадр из crc_vectors.json: seq=1, RELEASE, ПС №1, 500 мс. */
-    feed(F_RELEASE, sizeof(F_RELEASE), 2u);
+    /* При старте платы исполняем только NOP и неизвестный код. Проверки
+     * движения выполняются на ПК в tests/host с подменой GPIO и времени.
+     * Кадры RELEASE выше проверяют протокол без исполнения команды. */
+    len = make_cmd(st_scratch, 1u, CMD_CODE_NOP, 0u, 0u);
+    feed(st_scratch, len, 2u);
     command_step();
 
     (void)regfile_read_input(IREG_ACK_SEQ, &v);
-    st_eq16("cmd:release/ack_seq", v, 1u);
+    st_eq16("cmd:nop/ack_seq", v, 1u);
     (void)regfile_read_input(IREG_ACK_RESULT, &v);
-    st_eq16("cmd:release/ack_result", v, (uint16_t)ACK_RESULT_OK);
-    st_eq16("cmd:release/pulse_on", command_release_active(0u), 1u);
+    st_eq16("cmd:nop/ack_result", v, (uint16_t)ACK_RESULT_OK);
 
-    /* Второе устройство ещё не тронуто: импульс подан ровно одному. Иначе
-     * сброс одного ПС уводил бы оба. */
-    st_eq16("cmd:release/other_idle", command_release_active(1u), 0u);
-
-    /* ГЛАВНАЯ ПРОВЕРКА ПРОТОКОЛА. Тот же кадр байт в байт — повтор после
-     * таймаута. ПС обязано сброситься один раз.
-     *
-     * Ставим метку в ack_result: если дубликат исполнится, он её затрёт
-     * значением OK. Сравнивать сами квитанции бесполезно — у повтора тот же
-     * номер и тот же результат, они одинаковы в обоих случаях. */
+    /* Метка показывает повторное исполнение команды с тем же cmd_seq. */
     regfile_set_input(IREG_ACK_RESULT, 0xBEEFu);
-    feed(F_RELEASE_REPEAT, sizeof(F_RELEASE_REPEAT), 2u);
+    feed(st_scratch, len, 2u);
     command_step();
 
     (void)regfile_read_input(IREG_ACK_RESULT, &v);
     st_eq16("cmd:repeat_not_executed", v, 0xBEEFu);
+
+    /* Нулевой номер не исполняется и не меняет предыдущую квитанцию. */
+    len = make_cmd(st_scratch, 0u, CMD_CODE_NOP, 0u, 0u);
+    feed(st_scratch, len, 2u);
+    command_step();
+    (void)regfile_read_input(IREG_ACK_SEQ, &v);
+    st_eq16("cmd:zero_seq/ack_unchanged", v, 1u);
+    (void)regfile_read_input(IREG_ACK_RESULT, &v);
+    st_eq16("cmd:zero_seq/result_unchanged", v, 0xBEEFu);
 
     /* Новый номер — исполняется. */
     len = make_cmd(st_scratch, 2u, CMD_CODE_NOP, 0u, 0u);
@@ -525,52 +528,6 @@ static void run_command_cases(void)
     command_step();
     (void)regfile_read_input(IREG_ACK_RESULT, &v);
     st_eq16("cmd:unknown_code", v, (uint16_t)ACK_RESULT_UNKNOWN_CMD);
-
-    /* Номер оси вне диапазона — проверка аргументов настоящая уже сейчас. */
-    len = make_cmd(st_scratch, 4u, CMD_CODE_AXIS_GOTO, AXIS_COUNT, 0u);
-    feed(st_scratch, len, 2u);
-    command_step();
-    (void)regfile_read_input(IREG_ACK_RESULT, &v);
-    st_eq16("cmd:axis_bad_index", v, (uint16_t)ACK_RESULT_BAD_ARG);
-
-    /* Ось корректная, но связи нет: в тестах uart_link ещё не поднят, и
-     * настоящий слейв обнулён — ровно случай «мастер ни разу не выходил». */
-    len = make_cmd(st_scratch, 5u, CMD_CODE_AXIS_STOP, 0u, 0u);
-    feed(st_scratch, len, 2u);
-    command_step();
-    (void)regfile_read_input(IREG_ACK_RESULT, &v);
-    st_eq16("cmd:axis_link_lost", v, (uint16_t)ACK_RESULT_REFUSED_LINK_LOST);
-
-    /* Нулевая длительность импульса замка. */
-    len = make_cmd(st_scratch, 6u, CMD_CODE_RELEASE, 0u, 0u);
-    feed(st_scratch, len, 2u);
-    command_step();
-    (void)regfile_read_input(IREG_ACK_RESULT, &v);
-    st_eq16("cmd:release_zero_len", v, (uint16_t)ACK_RESULT_BAD_ARG);
-
-    /* Эталонный кадр второго устройства: номер обязан доехать до нужной
-     * катушки. Перепутанный arg0 сбросил бы не то ПС, и снаружи это выглядело
-     * бы исправной работой. */
-    feed(F_RELEASE_SECOND, sizeof(F_RELEASE_SECOND), 2u);
-    command_step();
-    (void)regfile_read_input(IREG_ACK_RESULT, &v);
-    st_eq16("cmd:release2/ack_result", v, (uint16_t)ACK_RESULT_OK);
-    st_eq16("cmd:release2/pulse_on", command_release_active(1u), 1u);
-
-    /* Номер устройства вне диапазона. */
-    len = make_cmd(st_scratch, 7u, CMD_CODE_RELEASE, RELEASE_COUNT, 500u);
-    feed(st_scratch, len, 2u);
-    command_step();
-    (void)regfile_read_input(IREG_ACK_RESULT, &v);
-    st_eq16("cmd:release_bad_unit", v, (uint16_t)ACK_RESULT_BAD_ARG);
-
-    /* Длительность выше потолка из карты. */
-    len = make_cmd(st_scratch, 8u, CMD_CODE_RELEASE, 0u,
-                   (uint16_t)(RELEASE_SPECS[0].pulse_ms_max + 1u));
-    feed(st_scratch, len, 2u);
-    command_step();
-    (void)regfile_read_input(IREG_ACK_RESULT, &v);
-    st_eq16("cmd:release_too_long", v, (uint16_t)ACK_RESULT_BAD_ARG);
 
     regfile_init();
     command_init();

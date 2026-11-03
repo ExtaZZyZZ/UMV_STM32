@@ -414,28 +414,25 @@ def _number(text: str, what: str) -> int | None:
 
 
 def cmd_release(args: argparse.Namespace) -> int:
-    """RELEASE: номер устройства в arg0, длительность импульса в arg1.
-
-    Раньше здесь длительность уезжала в arg0, а в arg1 шёл ноль — раскладка
-    от BUOY_RELEASE, до того как в карте v4 появилось второе устройство.
-    Плата читала это как «сбросить ПС №500 импульсом 0 мс».
-    """
-    if not args.params:
-        print("Нужен номер устройства: python tools/mbpoll.py release 0 [мс]")
-        print("В arg0 едет индекс: 0 — система сброса ПС №1, 1 — №2.")
+    """RELEASE: arg0 — индекс устройства, arg1 — зарезервированный ноль."""
+    if len(args.params) != 1:
+        print("Использование: python tools/mbpoll.py release 0")
+        print("Индекс устройства: 0 — первое ПС, 1 — второе.")
         return 2
 
     device = _number(args.params[0], "Номер устройства")
     if device is None:
         return 2
-    pulse = 500
-    if len(args.params) > 1:
-        pulse = _number(args.params[1], "Длительность")
-        if pulse is None:
-            return 2
 
-    print(f"Сброс ПС №{device + 1}: arg0={device} (индекс), arg1={pulse} мс")
-    return send_command(args.port, CMD_RELEASE, device, pulse, args.twice)
+    if device not in (0, 1):
+        print("Номер устройства должен быть 0 или 1.")
+        return 2
+
+    print(
+        f"Сброс ПС №{device + 1}: "
+        f"полный автоматический цикл, arg0={device}, arg1=0"
+    )
+    return send_command(args.port, CMD_RELEASE, device, 0, args.twice)
 
 
 def cmd_axis(args: argparse.Namespace) -> int:

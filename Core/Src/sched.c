@@ -9,6 +9,8 @@
 #include "axis.h"
 #include "encoder.h"
 #include "wdg.h"
+#include "release.h"
+
 static uint32_t serviced;     
 static uint32_t max_lag;      
 static uint32_t late_ticks;   
@@ -22,7 +24,6 @@ typedef struct {
 static const sched_task_t TASKS[] = {
    
     {  1u,    0u, uart_link_task     },  // частота работы modbus 1000 Гц
-    {  1u,    0u, command_pulse_step },  // снятие импульса замка, 1000 Гц
     {  1u,    0u, axis_failsafe_step },  // снятие моста при потере связи, 1000 Гц
     {  1u,    0u, inputs_step        },  // дребезг концевиков, 1000 Гц
     {  1u,    0u, encoder_step       },  // обмен с энкодером, 1000 Гц
@@ -31,6 +32,7 @@ static const sched_task_t TASKS[] = {
     { 20u,    5u, outputs_step       },  // раскладка маски по ногам, 50 Гц
     { 20u,   10u, telemetry_step     },  // обновление телеметрии, 50 Гц
     { 100u,  15u, wdg_step           },  // перезапуск вотчдога 10 Гц
+    { 1u,    0u,  release_step},         // система сброса ПС, 1000 Гц
 };
 
 #define TASK_COUNT (sizeof(TASKS) / sizeof(TASKS[0]))

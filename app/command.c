@@ -1,8 +1,5 @@
-
-
 #include "command.h"
-
-#include "main.h"
+#include "release.h"
 #include "axis.h"
 #include "board_registers.h"
 #include "regfile.h"
@@ -12,44 +9,13 @@
 
 static uint16_t last_seq;
 
-static struct {
-    uint8_t  active;
-    uint32_t started_ms;
-    uint32_t duration_ms;
-} pulses[RELEASE_COUNT];
-
-static const struct {
-    GPIO_TypeDef *port;
-    uint16_t      pin;
-    uint8_t       active_high;
-}
- LOCK_PINS[] = {
-    [0] = { LOCK1_GPIO_Port, LOCK1_Pin, 1u },
-    [1] = { LOCK2_GPIO_Port, LOCK2_Pin, 1u },
-};
-static void release_coil_set(uint8_t unit, uint8_t on)
- {
-     const GPIO_PinState level =
-         (on == LOCK_PINS[unit].active_high) ? GPIO_PIN_SET : GPIO_PIN_RESET;
-     HAL_GPIO_WritePin(LOCK_PINS[unit].port, LOCK_PINS[unit].pin, level);
- }
-
-static uint16_t do_release(uint16_t unit, uint16_t duration_ms)
+static uint16_t do_release(uint16_t unit, uint16_t reserved)
 {
-    if (unit >= RELEASE_COUNT) {
-        return ACK_RESULT_BAD_ARG;
-    }
-    if (duration_ms == 0u || duration_ms > RELEASE_SPECS[unit].pulse_ms_max) {
+    if (reserved != 0u) {
         return ACK_RESULT_BAD_ARG;
     }
 
-
-    pulses[unit].started_ms  = HAL_GetTick();
-    pulses[unit].duration_ms = duration_ms;
-    pulses[unit].active      = 1u;
-    release_coil_set((uint8_t)unit, 1u);
-
-    return ACK_RESULT_OK;
+    return release_cmd_start(unit);
 }
 
 static uint16_t do_axis(uint16_t code, uint16_t axis, uint16_t step)
@@ -95,12 +61,6 @@ static uint16_t command_execute(uint16_t code, uint16_t arg0, uint16_t arg1)
 void command_init(void)
 {
     last_seq = 0u;
-    for (unsigned i = 0; i < RELEASE_COUNT; i++) {
-        pulses[i].active      = 0u;
-        pulses[i].started_ms  = 0u;
-        pulses[i].duration_ms = 0u;
-        release_coil_set((uint8_t)i, 0u);
-    }
 }
 
 void command_step(void)
@@ -122,22 +82,3 @@ void command_step(void)
     regfile_set_input(IREG_ACK_SEQ,    seq);
 }
 
-void command_pulse_step(void)
-{
-    const uint32_t now = HAL_GetTick();
-
-    for (unsigned i = 0; i < RELEASE_COUNT; i++) {
-        if (!pulses[i].active) {
-            continue;
-        }
-        if ((now - pulses[i].started_ms) >= pulses[i].duration_ms) {
-            release_coil_set((uint8_t)i, 0u);
-            pulses[i].active = 0u;
-        }
-    }
-}
-
-uint8_t command_release_active(uint8_t unit)
-{
-    return (unit < RELEASE_COUNT) ? pulses[unit].active : 0u;
-}
