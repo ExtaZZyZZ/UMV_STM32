@@ -130,7 +130,7 @@ static void axis_apply(unsigned i, dir_t dir)
 
 
     HAL_GPIO_WritePin(p->ext_port, p->ext_pin,
-                      (dir == DIR_EXTEND)  ? GPIO_PIN_SET : GPIO_PIN_RESET);
+                      (dir != DIR_NONE) ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(p->ret_port, p->ret_pin,
                       (dir == DIR_RETRACT) ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(p->en_port, p->en_pin,
