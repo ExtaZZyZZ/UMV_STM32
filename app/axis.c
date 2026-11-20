@@ -502,6 +502,11 @@ uint16_t axis_cmd_home(uint16_t i)
     return motion_start(i, DIR_RETRACT, 0u, travel, AXIS_STATE_HOMING, REF_LOW);
 }
 
+bool axis_calibration_active(void)
+{
+    return step_calib != CALIB_OFF;
+}
+
 uint16_t axis_cmd_calibrate(uint16_t i)
 {
     if (!AXIS_SPECS[i].has_encoder) {

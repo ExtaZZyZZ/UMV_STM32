@@ -10,6 +10,12 @@
 #include "encoder.h"
 #include "wdg.h"
 #include "release.h"
+#include "fw_update.h"
+
+static void firmware_update_step(void)
+{
+    fw_update_step(HAL_GetTick(), uart_link_is_up() != 0u, uart_link_tx_idle());
+}
 
 static uint32_t serviced;     
 static uint32_t max_lag;      
@@ -33,6 +39,7 @@ static const sched_task_t TASKS[] = {
     { 20u,   10u, telemetry_step     },  // обновление телеметрии, 50 Гц
     { 100u,  15u, wdg_step           },  // перезапуск вотчдога 10 Гц
     { 1u,    0u,  release_step},         // система сброса ПС, 1000 Гц
+    {  1u,    0u, firmware_update_step },
 };
 
 #define TASK_COUNT (sizeof(TASKS) / sizeof(TASKS[0]))

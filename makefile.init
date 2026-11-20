@@ -1,0 +1,4 @@
+# Invalidate Run image even if make stops resolving a build prerequisite.
+ifeq ($(notdir $(CURDIR)),Debug)
+all main-build: invalidate-mcuboot-run
+endif

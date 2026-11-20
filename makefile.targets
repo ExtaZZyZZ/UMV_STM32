@@ -1,0 +1,23 @@
+# The generated CubeIDE makefile includes this file after its normal targets.
+ifeq ($(notdir $(CURDIR)),Debug)
+MCUBOOT_RUN_IMAGE := $(BUILD_ARTIFACT_NAME)-mcuboot.hex
+MCUBOOT_UART_IMAGE := $(BUILD_ARTIFACT_NAME)-mcuboot.bin
+MCUBOOT_RUN_PYTHON ?= $(subst \,/,$(USERPROFILE))/.venvs/usv-mcuboot/Scripts/python.exe
+MCUBOOT_IMAGE_VERSION ?= 1.1.3+0
+
+main-build: prepare-mcuboot-run
+
+# A failed build must leave no images from a prior build.
+$(OBJS) $(BUILD_ARTIFACT): | invalidate-mcuboot-run
+invalidate-mcuboot-run:
+	rm -f -- "$(MCUBOOT_RUN_IMAGE)" "$(MCUBOOT_UART_IMAGE)"
+
+prepare-mcuboot-run: $(BUILD_ARTIFACT) secondary-outputs
+	"$(MCUBOOT_RUN_PYTHON)" -B "../tools/cubeide_pack.py" "$<" "$(MCUBOOT_IMAGE_VERSION)"
+
+clean: clean-mcuboot-run
+clean-mcuboot-run:
+	rm -f -- "$(MCUBOOT_RUN_IMAGE)" "$(MCUBOOT_UART_IMAGE)"
+
+.PHONY: prepare-mcuboot-run invalidate-mcuboot-run clean-mcuboot-run
+endif

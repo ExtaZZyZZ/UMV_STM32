@@ -25,7 +25,7 @@ void telemetry_step(void)
 
     uint16_t flags = 0u;
 
-    if (s->link_ever_valid && (now - s->last_valid_ms) < LINK_TIMEOUT_MS) {
+    if (uart_link_is_up()) {
         flags |= (uint16_t)(1u << STATUS_FLAG_LINK_OK);
     }
     regfile_set_input(IREG_ENC_ERR, encoder_err_count());

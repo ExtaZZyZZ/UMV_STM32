@@ -7,6 +7,7 @@
 #include "main.h"
 #include "board_registers.h"
 #include "encoder.h"
+#include "fw_update.h"
 
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
@@ -122,8 +123,13 @@ mb_slave_t *uart_link_slave(void)
 
 uint8_t uart_link_is_up(void)
 {
-    return (uint8_t)(slave.link_ever_valid &&
+    return (uint8_t)(!fw_update_transfer_active() && slave.link_ever_valid &&
                      ((HAL_GetTick() - slave.last_valid_ms) < LINK_TIMEOUT_MS));
+}
+
+bool uart_link_tx_idle(void)
+{
+    return port1.tx_left == 0u && __HAL_UART_GET_FLAG(&huart1, UART_FLAG_TC);
 }
 
 void uart_receive_isr(void) 

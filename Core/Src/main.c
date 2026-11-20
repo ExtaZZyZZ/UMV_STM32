@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "selftest.h"
 #include "regfile.h"
+#include "fw_update.h"
 #include "uart_link.h"
 #include "command.h"
 #include "inputs.h"
@@ -116,6 +117,7 @@ int main(void)
   command_init();
   inputs_init();
   outputs_init();
+  fw_update_init(HAL_GetTick());
   sched_init();
   wdg_init();
   MX_IWDG_Init();

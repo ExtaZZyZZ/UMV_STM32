@@ -34,6 +34,7 @@ typedef struct {
     uint16_t frame_err;
     uint32_t last_valid_ms;
     uint8_t  link_ever_valid;
+    uint8_t  fw_reply_pending;
 
     uint8_t  frame[ADU_MAX_LEN];
     uint16_t frame_len;

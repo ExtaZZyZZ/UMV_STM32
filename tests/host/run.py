@@ -22,12 +22,17 @@ def main():
     build = root / "Debug" / "host_tests"
     build.mkdir(parents=True, exist_ok=True)
     executable = build / ("host_tests.exe" if os.name == "nt" else "host_tests")
-    includes = ["tests/host/include", "Core/Inc", "app", "modbus", "vendor", "tests"]
+    includes = [
+        "tests/host/include", "Core/Inc", "app", "modbus", "vendor", "tests",
+        "bootloader/Inc", "third_party/mcuboot/boot/bootutil/include",
+    ]
     sources = [
         "tests/host/host_hal.c", "tests/host/test_main.c",
         "tests/host/test_boot.c", "tests/host/test_command.c",
         "tests/host/test_release.c", "tests/selftest.c",
-        "app/command.c", "app/outputs.c", "app/inputs.c",
+        "app/command.c", "app/outputs.c", "app/inputs.c", "app/fw_update.c",
+        "tests/host/test_fw_update.c",
+        "third_party/mcuboot/boot/bootutil/src/bootutil_public.c",
         "modbus/crc16.c", "modbus/pdu.c", "modbus/regfile.c", "modbus/slave.c",
     ]
     command = [compiler, "-std=c11", "-Wall", "-Wextra", "-Werror", "-g", "-O0"]

@@ -7,6 +7,7 @@
 #ifndef APP_AXIS_H
 #define APP_AXIS_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 void axis_init(void);
@@ -25,5 +26,6 @@ uint16_t axis_cmd_home(uint16_t axis);
 /* Прогон по упорам: вниз, вверх, снять показания энкодера в обоих. Только ось
  * с энкодером; результат — IDLE или FAULT по окончании, не в ответе на команду. */
 uint16_t axis_cmd_calibrate(uint16_t axis);
+bool axis_calibration_active(void);
 
 #endif /* APP_AXIS_H */

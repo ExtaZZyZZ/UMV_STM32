@@ -8,6 +8,7 @@
 #ifndef MODBUS_UART_LINK_H
 #define MODBUS_UART_LINK_H
 
+#include <stdbool.h>
 #include "slave.h"
 
 
@@ -27,5 +28,6 @@ mb_slave_t *uart_link_slave(void);
 
 
 uint8_t uart_link_is_up(void);
+bool uart_link_tx_idle(void);
 
 #endif /* MODBUS_UART_LINK_H */
